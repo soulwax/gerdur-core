@@ -26,6 +26,17 @@ export class GeoBlocked extends Error {
   }
 }
 
+/**
+ * The track's `TRACK_TOKEN` has expired (they last ~1 hour). Re-fetch the track
+ * with `getTrackInfo(SNG_ID)` for a fresh token and retry.
+ */
+export class ExpiredTrackToken extends Error {
+  constructor(public readonly sngId: string) {
+    super(`Track token for ${sngId} has expired — re-fetch the track and retry`);
+    this.name = 'ExpiredTrackToken';
+  }
+}
+
 let user_data: userData | null = null;
 
 const getTrackFileSize = (track: trackType, quality: number) => {
@@ -77,8 +88,13 @@ const getTrackUrlFromServer = async (track_token: string, format: string): Promi
 
   if (data.data.length > 0) {
     if (data.data[0].errors) {
-      if (data.data[0].errors[0].code === 2002) {
+      const {code} = data.data[0].errors[0];
+      if (code === 2002) {
         throw new GeoBlocked(user.country);
+      }
+      // 2000: invalid/expired token · 2001: token has no rights on this song
+      if (code === 2000 || code === 2001) {
+        throw new ExpiredTrackToken(track_token);
       }
       throw new Error(Object.entries(data.data[0].errors[0]).join(', '));
     }
@@ -97,6 +113,7 @@ export const getTrackDownloadUrl = async (
 ): Promise<{trackUrl: string; isEncrypted: boolean; fileSize: number} | null> => {
   let wrongLicense: WrongLicense | null = null;
   let geoBlocked: GeoBlocked | null = null;
+  let expiredToken: ExpiredTrackToken | null = null;
   let formatName: string;
   switch (quality) {
     case 9:
@@ -112,23 +129,32 @@ export const getTrackDownloadUrl = async (
       throw new Error(`Unknown quality ${quality}`);
   }
 
-  // Get URL with the official API
-  try {
-    const url = await getTrackUrlFromServer(track.TRACK_TOKEN, formatName);
-    if (url) {
-      return {
-        trackUrl: url,
-        isEncrypted: url.includes('/mobile/') || url.includes('/media/'),
-        fileSize: getTrackFileSize(track, quality),
-      };
-    }
-  } catch (err) {
-    if (err instanceof WrongLicense) {
-      wrongLicense = err;
-    } else if (err instanceof GeoBlocked) {
-      geoBlocked = err;
-    } else {
-      throw err;
+  // Track tokens last ~1 hour. If it's already stale, skip the doomed media API
+  // call and go straight to the token-free fallback below.
+  const tokenStale = Boolean(track.TRACK_TOKEN_EXPIRE && track.TRACK_TOKEN_EXPIRE * 1000 < Date.now());
+  if (tokenStale) {
+    expiredToken = new ExpiredTrackToken(track.SNG_ID);
+  } else {
+    // Get URL with the official API
+    try {
+      const url = await getTrackUrlFromServer(track.TRACK_TOKEN, formatName);
+      if (url) {
+        return {
+          trackUrl: url,
+          isEncrypted: url.includes('/mobile/') || url.includes('/media/'),
+          fileSize: getTrackFileSize(track, quality),
+        };
+      }
+    } catch (err) {
+      if (err instanceof WrongLicense) {
+        wrongLicense = err;
+      } else if (err instanceof GeoBlocked) {
+        geoBlocked = err;
+      } else if (err instanceof ExpiredTrackToken) {
+        expiredToken = err;
+      } else {
+        throw err;
+      }
     }
   }
 
@@ -150,6 +176,9 @@ export const getTrackDownloadUrl = async (
   }
   if (geoBlocked) {
     throw geoBlocked;
+  }
+  if (expiredToken) {
+    throw expiredToken;
   }
   return null;
 };

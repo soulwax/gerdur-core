@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import type {trackType} from '../types';
+import {Blowfish} from './blowfish';
 
 const md5 = (data: string, type: crypto.Encoding = 'ascii') => {
   const md5sum = crypto.createHash('md5');
@@ -20,47 +21,87 @@ export const getSongFileName = ({MD5_ORIGIN, SNG_ID, MEDIA_VERSION}: trackType, 
   return crypto.createCipheriv('aes-128-ecb', 'jo6aey6haid2Teih', '').update(step2, 'ascii', 'hex');
 };
 
-const getBlowfishKey = (trackId: string) => {
-  const SECRET = 'g4el58wc' + '0zvf9na1';
+const BLOWFISH_SECRET = 'g4el58wc0zvf9na1';
+
+/** Per-track Blowfish key: md5(id)[i] ^ md5(id)[i+16] ^ SECRET[i], for i in 0..15. */
+const getBlowfishKey = (trackId: string): Buffer => {
   const idMd5 = md5(trackId);
-  let bfKey = '';
+  const key = Buffer.allocUnsafe(16);
   for (let i = 0; i < 16; i++) {
-    bfKey += String.fromCharCode(idMd5.charCodeAt(i) ^ idMd5.charCodeAt(i + 16) ^ SECRET.charCodeAt(i));
+    key[i] = idMd5.charCodeAt(i) ^ idMd5.charCodeAt(i + 16) ^ BLOWFISH_SECRET.charCodeAt(i);
   }
-  return bfKey;
+  return key;
 };
 
-const decryptChunk = (chunk: Buffer, blowFishKey: string) => {
-  const cipher = crypto.createDecipheriv('bf-cbc', blowFishKey, Buffer.from([0, 1, 2, 3, 4, 5, 6, 7]));
-  cipher.setAutoPadding(false);
-  return Buffer.concat([cipher.update(chunk), cipher.final()]);
-};
+const CHUNK = 2048;
 
 /**
+ * Decrypt a downloaded track. Deezer applies Blowfish-CBC "stripe" obfuscation:
+ * the file is split into 2048-byte chunks and only every third chunk (0, 3, 6…)
+ * is encrypted; the rest — and any trailing partial chunk — are plaintext.
  *
- * @param source Downloaded song from `getTrackDownloadUrl`
- * @param trackId Song ID as string
+ * @param source Downloaded body from `getTrackDownloadUrl`
+ * @param trackId `SNG_ID` as a string
  */
-export const decryptDownload = (source: Buffer, trackId: string) => {
-  const chunkSize = 2048;
-  const blowFishKey = getBlowfishKey(trackId);
-  let chunkIndex = 0;
+export const decryptDownload = (source: Buffer, trackId: string): Buffer => {
+  const bf = new Blowfish(getBlowfishKey(trackId));
+  const dest = Buffer.allocUnsafe(source.length);
   let position = 0;
-  const destBuffer = Buffer.alloc(source.length);
+  let chunkIndex = 0;
 
   while (position < source.length) {
-    const currentChunkSize = Math.min(chunkSize, source.length - position);
-    const sourceChunk = source.subarray(position, position + currentChunkSize);
-
-    if (chunkIndex % 3 > 0 || currentChunkSize < chunkSize) {
-      sourceChunk.copy(destBuffer, position);
+    const size = Math.min(CHUNK, source.length - position);
+    if (chunkIndex % 3 === 0 && size === CHUNK) {
+      bf.decryptCbc(source, position, CHUNK, dest);
     } else {
-      decryptChunk(sourceChunk, blowFishKey).copy(destBuffer, position);
+      source.copy(dest, position, position, position + size);
     }
-
-    position += currentChunkSize;
+    position += size;
     chunkIndex++;
   }
 
-  return destBuffer;
+  return dest;
 };
+
+/**
+ * Streaming variant: feed it socket chunks in order via `write()`, then call
+ * `final()`. Decrypts each 2048-byte stripe as it completes — constant memory,
+ * and the CPU work hides behind the (slower) network read.
+ */
+export class TrackDecryptStream {
+  private readonly bf: Blowfish;
+  private carry = Buffer.alloc(0);
+  private chunkIndex = 0;
+
+  constructor(trackId: string) {
+    this.bf = new Blowfish(getBlowfishKey(trackId));
+  }
+
+  /** Returns the decrypted bytes for every complete 2048-byte stripe now available. */
+  write(part: Buffer): Buffer {
+    const data = this.carry.length ? Buffer.concat([this.carry, part]) : part;
+    const complete = data.length - (data.length % CHUNK);
+    if (complete === 0) {
+      this.carry = data;
+      return Buffer.alloc(0);
+    }
+    const out = Buffer.allocUnsafe(complete);
+    for (let off = 0; off < complete; off += CHUNK) {
+      if (this.chunkIndex % 3 === 0) {
+        this.bf.decryptCbc(data, off, CHUNK, out);
+      } else {
+        data.copy(out, off, off, off + CHUNK);
+      }
+      this.chunkIndex++;
+    }
+    this.carry = data.subarray(complete);
+    return out;
+  }
+
+  /** The trailing partial chunk (always plaintext). */
+  final(): Buffer {
+    const rest = this.carry;
+    this.carry = Buffer.alloc(0);
+    return rest;
+  }
+}

@@ -1,141 +1,96 @@
 /**
- * Fast LRU & TTL cache
- * @param  {Integer} options.max		- Max entries in the cache. @default Infinity
- * @param  {Integer} options.ttl		- Timeout before removing entries. @default Infinity
+ * LRU + TTL cache.
+ *
+ * A `Map` keeps insertion order = recency: `get` re-inserts to bump an entry to
+ * the tail; a full `set` evicts the head (least-recently-used). All operations
+ * are O(1). Expired entries are dropped lazily on `get` and opportunistically on
+ * a full `set`.
+ *
+ * @param options.maxSize max entries (default `Infinity`)
+ * @param options.ttl     ms before an entry expires (default `0` = never)
  */
+interface Entry {
+  value: unknown;
+  expire: number; // 0 = never
+}
+
 class FastLRU {
-  _max: number;
-  _ttl: number;
-  _cache: Map<any, any>;
-  _meta: {
-    [key: string]: any;
-  };
-  constructor({maxSize = Infinity, ttl = 0}) {
-    // Default options
-    this._max = maxSize;
-    this._ttl = ttl;
-    this._cache = new Map();
+  private readonly max: number;
+  private readonly ttl: number;
+  private readonly map = new Map<string, Entry>();
 
-    // Metadata for entries
-    this._meta = {};
+  constructor({maxSize = Infinity, ttl = 0}: {maxSize?: number; ttl?: number} = {}) {
+    this.max = maxSize;
+    this.ttl = ttl;
   }
 
-  /**
-   * Add new entry
-   */
-  set(key: string, value: any, ttl: number = this._ttl) {
-    // Execution time
-    const time = Date.now();
+  get(key: string): any {
+    const e = this.map.get(key);
+    if (e === undefined) return undefined;
+    if (e.expire !== 0 && e.expire < Date.now()) {
+      this.map.delete(key);
+      return undefined;
+    }
+    // bump to most-recently-used
+    this.map.delete(key);
+    this.map.set(key, e);
+    return e.value;
+  }
 
-    // Remvove least recently used elements if exceeds max bytes
-    if (this._cache.size >= this._max) {
-      const items = Object.values(this._meta);
-      if (this._ttl > 0) {
-        for (const item of items) {
-          if (item.expire < time) {
-            this.delete(item.key);
-          }
+  peek(key: string): any {
+    return this.map.get(key)?.value;
+  }
+
+  set(key: string, value: any, ttl: number = this.ttl): void {
+    this.map.delete(key);
+    if (this.map.size >= this.max) {
+      // drop expired first, then the LRU head if still over
+      if (this.ttl > 0) {
+        const now = Date.now();
+        for (const [k, e] of this.map) {
+          if (e.expire !== 0 && e.expire < now) this.map.delete(k);
         }
       }
-
-      if (this._cache.size >= this._max) {
-        const least = items.sort((a, b) => a.hits - b.hits)[0];
-        this.delete(least.key);
+      while (this.map.size >= this.max) {
+        const oldest = this.map.keys().next().value;
+        if (oldest === undefined) break;
+        this.map.delete(oldest);
       }
     }
-
-    // Override if key already set
-    this._cache.set(key, value);
-    this._meta[key] = {
-      key,
-      hits: 0,
-      expire: time + ttl,
-    };
+    this.map.set(key, {value, expire: ttl > 0 ? Date.now() + ttl : 0});
   }
 
-  /**
-   * Get entry
-   */
-  get(key: string) {
-    if (this._cache.has(key)) {
-      const item = this._cache.get(key);
-      if (this._ttl > 0) {
-        const time = Date.now();
-        if (this._meta[key].expire < time) {
-          this.delete(key);
-          return undefined;
-        }
-      }
-
-      this._meta[key].hits++;
-      return item;
-    }
+  delete(key: string): void {
+    this.map.delete(key);
   }
 
-  /**
-   * Get without hitting hits
-   */
-  peek(key: string) {
-    return this._cache.get(key);
+  clear(): void {
+    this.map.clear();
   }
 
-  /**
-   * Remove entry
-   */
-  delete(key: string) {
-    delete this._meta[key];
-    this._cache.delete(key);
+  has(key: string): boolean {
+    const e = this.map.get(key);
+    return e !== undefined && (e.expire === 0 || e.expire >= Date.now());
   }
 
-  /**
-   * Remove all entries
-   */
-  clear() {
-    this._cache.clear();
-    this._meta = {};
+  keys(): IterableIterator<string> {
+    return this.map.keys();
   }
 
-  /**
-   * Check has entry
-   */
-  has(key: string) {
-    return this._cache.has(key);
+  *values(): IterableIterator<unknown> {
+    for (const e of this.map.values()) yield e.value;
   }
 
-  /**
-   * Get all kies
-   * @returns {Iterator} Iterator on all kies
-   */
-  keys() {
-    return this._cache.keys();
+  *entries(): IterableIterator<[string, unknown]> {
+    for (const [k, e] of this.map) yield [k, e.value];
   }
 
-  /**
-   * Iterate over values
-   */
-  values() {
-    return this._cache.values();
+  forEach(cb: (value: unknown, key: string) => void): void {
+    for (const [k, e] of this.map) cb(e.value, k);
   }
 
-  /**
-   * Iterate over entries
-   */
-  entries() {
-    return this._cache.entries();
-  }
-
-  /**
-   * For each
-   */
-  forEach(cb: any) {
-    return this._cache.forEach(cb);
-  }
-
-  /**
-   * Entries total size
-   */
-  get size() {
-    return this._cache.size;
+  get size(): number {
+    return this.map.size;
   }
 }
 
