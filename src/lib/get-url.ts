@@ -1,5 +1,6 @@
+import delay from 'delay';
 import {getSongFileName} from '../lib/decrypt';
-import {headRequest} from '../lib/http';
+import {headRequest, HttpStatusError} from '../lib/http';
 import instance from '../lib/request';
 import type {trackType} from '../types';
 
@@ -69,22 +70,36 @@ const dzAuthenticate = async (): Promise<userData> => {
   return user_data;
 };
 
-const getTrackUrlFromServer = async (track_token: string, format: string): Promise<string | null> => {
+const MEDIA_MAX_RETRIES = 3;
+
+const getTrackUrlFromServer = async (track_token: string, format: string, attempt = 0): Promise<string | null> => {
   const user = user_data ? user_data : await dzAuthenticate();
   if ((format === 'FLAC' && !user.can_stream_lossless) || (format === 'MP3_320' && !user.can_stream_hq)) {
     throw new WrongLicense(format);
   }
 
-  const {data} = await instance.post<any>('https://media.deezer.com/v1/get_url', {
-    license_token: user.license_token,
-    media: [
-      {
-        type: 'FULL',
-        formats: [{format, cipher: 'BF_CBC_STRIPE'}],
-      },
-    ],
-    track_tokens: [track_token],
-  });
+  let data: any;
+  try {
+    ({data} = await instance.post<any>('https://media.deezer.com/v1/get_url', {
+      license_token: user.license_token,
+      media: [
+        {
+          type: 'FULL',
+          formats: [{format, cipher: 'BF_CBC_STRIPE'}],
+        },
+      ],
+      track_tokens: [track_token],
+    }));
+  } catch (err) {
+    // media.deezer.com throttles / 5xx / stale license_token — re-auth and back off
+    const status = err instanceof HttpStatusError ? err.statusCode : 0;
+    if ((status === 403 || status === 429 || status >= 500) && attempt < MEDIA_MAX_RETRIES) {
+      user_data = null;
+      await delay(500 * 2 ** attempt + Math.floor(Math.random() * 250));
+      return getTrackUrlFromServer(track_token, format, attempt + 1);
+    }
+    throw err;
+  }
 
   if (data.data.length > 0) {
     if (data.data[0].errors) {
@@ -114,6 +129,7 @@ export const getTrackDownloadUrl = async (
   let wrongLicense: WrongLicense | null = null;
   let geoBlocked: GeoBlocked | null = null;
   let expiredToken: ExpiredTrackToken | null = null;
+  let mediaBlocked: HttpStatusError | null = null;
   let formatName: string;
   switch (quality) {
     case 9:
@@ -152,6 +168,9 @@ export const getTrackDownloadUrl = async (
         geoBlocked = err;
       } else if (err instanceof ExpiredTrackToken) {
         expiredToken = err;
+      } else if (err instanceof HttpStatusError && (err.statusCode === 403 || err.statusCode === 429)) {
+        // media API is throttling this account — try the token-free legacy CDN below
+        mediaBlocked = err;
       } else {
         throw err;
       }
@@ -179,6 +198,9 @@ export const getTrackDownloadUrl = async (
   }
   if (expiredToken) {
     throw expiredToken;
+  }
+  if (mediaBlocked) {
+    throw mediaBlocked;
   }
   return null;
 };

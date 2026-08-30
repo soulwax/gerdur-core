@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.3 - 2026-08-30
+
+### Changed
+
+- `getTrackDownloadUrl`: when `media.deezer.com/v1/get_url` returns 403/429/5xx (throttling or a stale license token), re-authenticate and retry with exponential backoff (up to 3×); if it still fails, fall through to the token-free legacy CDN instead of throwing.
+
 ## 1.0.2 - 2026-08-30
 
 ### Fixed
