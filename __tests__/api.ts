@@ -5,7 +5,7 @@ import {decryptDownload} from '../src/lib/decrypt';
 import {getBuffer} from '../src/lib/http';
 import {downloadAlbumCover} from '../src/metadata-writer/abumCover';
 import {getLyricsMusixmatch} from '../src/metadata-writer/musixmatchLyrics';
-import {getTrackDownloadUrl} from '../src/lib/get-url';
+import {getTrackDownloadUrl, resolveDownloadUrls} from '../src/lib/get-url';
 
 // Harder, Better, Faster, Stronger by Daft Punk
 const SNG_ID = '3135556';
@@ -40,6 +40,18 @@ test('GET TRACK INFO - PUBLIC API', async (t) => {
   t.is(response.id, Number(SNG_ID));
   t.is(response.isrc, 'GBDUW0000059');
   t.is(response.type, 'track');
+});
+
+test('CONCURRENT IDENTICAL REQUESTS ARE COALESCED', async (t) => {
+  // 10 simultaneous callers for one id must share a single in-flight request:
+  // the LRU is empty when they start, so without single-flight each hits the wire.
+  const responses = await Promise.all(Array.from({length: 10}, () => api.getAlbumInfoPublicApi('302127')));
+
+  t.is(responses.length, 10);
+  for (const r of responses) {
+    t.is(r, responses[0], 'every concurrent caller resolves to the same object');
+  }
+  t.is(Number(responses[0].id), 302127);
 });
 
 test('GET TRACK COVER', async (t) => {
@@ -152,6 +164,41 @@ test('SEARCH TRACK, ALBUM & ARTIST', async (t) => {
   t.truthy(response.TRACK.count > 0);
   t.truthy(response.ALBUM.count > 0);
   t.truthy(response.ARTIST.count > 0);
+});
+
+test('BATCH RESOLVE DOWNLOAD URLS', async (t) => {
+  if (!(await ensureDeezerUserAuth(t))) {
+    return;
+  }
+
+  // Discovery — first three tracks
+  const album = await api.getAlbumTracks(ALB_ID);
+  const tracks = album.data.slice(0, 3);
+
+  let resolved;
+  try {
+    resolved = await resolveDownloadUrls(tracks, [9, 3, 1]);
+  } catch (err) {
+    if (shouldSkipBecauseUnavailable(err, [403, 429])) {
+      skipWithReason(t, 'Skipping batch get_url test: media API is rate-limiting this account.');
+      return;
+    }
+    throw err;
+  }
+
+  t.is(resolved.length, tracks.length, 'one result per input track, in order');
+  for (const entry of resolved) {
+    if (!entry) {
+      continue; // geo-blocked / unavailable in this region — acceptable
+    }
+    t.true(/^https?:\/\//.test(entry.trackUrl), 'a real CDN URL');
+    t.true(entry.fileSize > 0, 'a non-zero file size');
+    t.true(['FLAC', 'MP3_320', 'MP3_128'].includes(entry.format));
+  }
+  t.true(
+    resolved.some((e) => e !== null),
+    'at least one track resolved',
+  );
 });
 
 if (process.env.CI) {

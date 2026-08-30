@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.4 - 2026-08-31
+
+### Added
+
+- `resolveDownloadUrls(tracks, qualities)` — resolve download URLs for a whole album/playlist in **one** `media.deezer.com/v1/get_url` POST (`track_tokens[]` + an ordered `formats[]` fallback), instead of one request per track re-tried per quality. ~19× faster URL resolution for a 14-track album. Returns one `ResolvedUrl | null` per input track, in order. `formatName(quality)` is also exported.
+- `httpAgent` / `httpsAgent` — the shared keep-alive connection pools are now exported so downstream apps can hand them to `got`/`undici` and reuse the same sockets for downloads. `getBuffer` / `getJson` / `getText` are exported too.
+
+### Changed
+
+- **Shared HTTP agents are tuned and bounded**: `keepAlive`, `maxSockets: 64` (was the Node default of `Infinity`), `maxFreeSockets: 16`, `scheduling: 'lifo'`, 30 s keep-alive. Caps a pathological fan-out from opening hundreds of sockets to `api.deezer.com`, while leaving generous headroom over the converter's concurrency.
+- **In-flight request coalescing** in the API layer: concurrent identical gateway / public-API calls (e.g. every track of one album asking for the same album info while tagging) now share a single request instead of each missing the still-empty cache and hitting the wire.
+
 ## 1.0.3 - 2026-08-30
 
 ### Changed

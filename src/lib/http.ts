@@ -42,8 +42,29 @@ interface RequestDescriptor {
   url: string;
 }
 
-const httpAgent = new HttpAgent({keepAlive: true});
-const httpsAgent = new HttpsAgent({keepAlive: true});
+/**
+ * Shared keep-alive connection pools. Every request gerdur-core makes — gateway,
+ * media API, CDN HEAD probes — reuses these, so a batch of calls to the same host
+ * rides one handful of TCP+TLS connections instead of a fresh handshake each time.
+ *
+ * `maxSockets` is bounded (not the Node default of `Infinity`): the converter fans
+ * out at concurrency 10–25, so 64 is generous headroom while still capping a
+ * pathological fan-out that would otherwise open hundreds of sockets to
+ * `api.deezer.com` and get the account rate-limited. `scheduling: 'lifo'` keeps
+ * the hottest socket warm. Downstream apps can import these and hand them to
+ * `got`/`undici` so downloads share the same pool.
+ */
+const AGENT_OPTS = {
+  keepAlive: true,
+  keepAliveMsecs: 30_000,
+  maxSockets: 64,
+  maxFreeSockets: 16,
+  scheduling: 'lifo' as const,
+  timeout: 60_000,
+};
+
+export const httpAgent = new HttpAgent(AGENT_OPTS);
+export const httpsAgent = new HttpsAgent(AGENT_OPTS);
 
 export interface HttpResponse<T> {
   config: RequestDescriptor;

@@ -72,50 +72,66 @@ const dzAuthenticate = async (): Promise<userData> => {
 
 const MEDIA_MAX_RETRIES = 3;
 
-const getTrackUrlFromServer = async (track_token: string, format: string, attempt = 0): Promise<string | null> => {
-  const user = user_data ? user_data : await dzAuthenticate();
-  if ((format === 'FLAC' && !user.can_stream_lossless) || (format === 'MP3_320' && !user.can_stream_hq)) {
-    throw new WrongLicense(format);
+/** quality code -> the `format` string the media API expects */
+export const formatName = (quality: number): string => {
+  switch (quality) {
+    case 9:
+      return 'FLAC';
+    case 3:
+      return 'MP3_320';
+    case 1:
+      return 'MP3_128';
+    default:
+      throw new Error(`Unknown quality ${quality}`);
   }
+};
 
-  let data: any;
+/** POST media.deezer.com/v1/get_url with re-auth + exponential-backoff retry on 403/429/5xx. */
+const mediaGetUrl = async (
+  track_tokens: string[],
+  formats: {format: string; cipher: 'BF_CBC_STRIPE'}[],
+  attempt = 0,
+): Promise<{data: any[]; country: string}> => {
+  const user = user_data ? user_data : await dzAuthenticate();
   try {
-    ({data} = await instance.post<any>('https://media.deezer.com/v1/get_url', {
+    const {data} = await instance.post<any>('https://media.deezer.com/v1/get_url', {
       license_token: user.license_token,
-      media: [
-        {
-          type: 'FULL',
-          formats: [{format, cipher: 'BF_CBC_STRIPE'}],
-        },
-      ],
-      track_tokens: [track_token],
-    }));
+      media: [{type: 'FULL', formats}],
+      track_tokens,
+    });
+    return {data: data.data ?? [], country: user.country};
   } catch (err) {
-    // media.deezer.com throttles / 5xx / stale license_token — re-auth and back off
     const status = err instanceof HttpStatusError ? err.statusCode : 0;
     if ((status === 403 || status === 429 || status >= 500) && attempt < MEDIA_MAX_RETRIES) {
       user_data = null;
       await delay(500 * 2 ** attempt + Math.floor(Math.random() * 250));
-      return getTrackUrlFromServer(track_token, format, attempt + 1);
+      return mediaGetUrl(track_tokens, formats, attempt + 1);
     }
     throw err;
   }
+};
 
-  if (data.data.length > 0) {
-    if (data.data[0].errors) {
-      const {code} = data.data[0].errors[0];
-      if (code === 2002) {
-        throw new GeoBlocked(user.country);
-      }
-      // 2000: invalid/expired token · 2001: token has no rights on this song
-      if (code === 2000 || code === 2001) {
-        throw new ExpiredTrackToken(track_token);
-      }
-      throw new Error(Object.entries(data.data[0].errors[0]).join(', '));
-    }
-    return data.data[0].media.length > 0 ? data.data[0].media[0].sources[0].url : null;
+/** Parse one `data[i]` entry from a get_url response into a source URL (or null / throw). */
+const parseMediaEntry = (entry: any, token: string, country: string): {url: string; format: string} | null => {
+  if (entry?.errors) {
+    const {code} = entry.errors[0];
+    if (code === 2002) throw new GeoBlocked(country);
+    if (code === 2000 || code === 2001) throw new ExpiredTrackToken(token);
+    throw new Error(Object.entries(entry.errors[0]).join(', '));
   }
-  return null;
+  const media = entry?.media?.[0];
+  if (!media?.sources?.length) return null;
+  return {url: media.sources[0].url, format: media.format};
+};
+
+const getTrackUrlFromServer = async (track_token: string, format: string): Promise<string | null> => {
+  const user = user_data ? user_data : await dzAuthenticate();
+  if ((format === 'FLAC' && !user.can_stream_lossless) || (format === 'MP3_320' && !user.can_stream_hq)) {
+    throw new WrongLicense(format);
+  }
+  const {data, country} = await mediaGetUrl([track_token], [{format, cipher: 'BF_CBC_STRIPE'}]);
+  if (!data.length) return null;
+  return parseMediaEntry(data[0], track_token, country)?.url ?? null;
 };
 
 /**
@@ -130,20 +146,7 @@ export const getTrackDownloadUrl = async (
   let geoBlocked: GeoBlocked | null = null;
   let expiredToken: ExpiredTrackToken | null = null;
   let mediaBlocked: HttpStatusError | null = null;
-  let formatName: string;
-  switch (quality) {
-    case 9:
-      formatName = 'FLAC';
-      break;
-    case 3:
-      formatName = 'MP3_320';
-      break;
-    case 1:
-      formatName = 'MP3_128';
-      break;
-    default:
-      throw new Error(`Unknown quality ${quality}`);
-  }
+  const format = formatName(quality);
 
   // Track tokens last ~1 hour. If it's already stale, skip the doomed media API
   // call and go straight to the token-free fallback below.
@@ -153,7 +156,7 @@ export const getTrackDownloadUrl = async (
   } else {
     // Get URL with the official API
     try {
-      const url = await getTrackUrlFromServer(track.TRACK_TOKEN, formatName);
+      const url = await getTrackUrlFromServer(track.TRACK_TOKEN, format);
       if (url) {
         return {
           trackUrl: url,
@@ -212,4 +215,55 @@ const testUrl = async (url: string): Promise<number> => {
   } catch (err) {
     return 0;
   }
+};
+
+const QUALITY_OF_FORMAT: Record<string, number> = {FLAC: 9, MP3_320: 3, MP3_128: 1, MP3_256: 3, MP3_64: 1};
+
+export interface ResolvedUrl {
+  trackUrl: string;
+  isEncrypted: boolean;
+  fileSize: number;
+  /** the format Deezer actually returned, e.g. `'FLAC'` */
+  format: string;
+}
+
+/**
+ * Resolve download URLs for many tracks in a **single** `get_url` request.
+ *
+ * `qualities` is an ordered preference list (e.g. `[9, 3, 1]`): Deezer returns
+ * the best each track is licensed for, so there is no per-quality retry. The
+ * result has one entry per input track, in order; `null` for a track that is
+ * geo-blocked, unavailable, or errored.
+ *
+ * @param tracks    from `getTrackInfo` / `parseInfo` (needs `TRACK_TOKEN`, `SNG_ID`, `FILESIZE_*`)
+ * @param qualities preference order — 9 = FLAC, 3 = MP3 320, 1 = MP3 128
+ */
+export const resolveDownloadUrls = async (
+  tracks: trackType[],
+  qualities: number[] = [9, 3, 1],
+): Promise<(ResolvedUrl | null)[]> => {
+  if (!tracks.length) return [];
+  const formats = qualities.map((q) => ({format: formatName(q), cipher: 'BF_CBC_STRIPE' as const}));
+  const {data, country} = await mediaGetUrl(
+    tracks.map((t) => t.TRACK_TOKEN),
+    formats,
+  );
+
+  return tracks.map((track, i) => {
+    let parsed: {url: string; format: string} | null;
+    try {
+      parsed = parseMediaEntry(data[i], track.TRACK_TOKEN, country);
+    } catch {
+      // per-track error (geo-block, no rights, expired token) — skip this one
+      return null;
+    }
+    if (!parsed) return null;
+    const q = QUALITY_OF_FORMAT[parsed.format] ?? qualities[0];
+    return {
+      trackUrl: parsed.url,
+      isEncrypted: parsed.url.includes('/mobile/') || parsed.url.includes('/media/'),
+      fileSize: getTrackFileSize(track, q),
+      format: parsed.format,
+    };
+  });
 };
