@@ -22,9 +22,7 @@ export interface albumTypeMinimal {
 }
 
 export interface albumType {
-  ALB_CONTRIBUTORS: {
-    main_artist: string[]; // ['Avicii']
-  };
+  ALB_CONTRIBUTORS: {[role: string]: string[]} | [];
   ALB_ID: string; // '9188269'
   ALB_PICTURE: string; // '6e58a99f59a150e9b4aefbeb2d6fc856'
   EXPLICIT_ALBUM_CONTENT: {
@@ -36,17 +34,25 @@ export interface albumType {
   ART_ID: string; // '293585'
   ART_NAME: string; // 'Avicii'
   ARTIST_IS_DUMMY: boolean;
+  COPYRIGHT?: string; // '© 2010 Parlophone Records Ltd' — may be '' or a bare label string
   DIGITAL_RELEASE_DATE: string; //'2014-12-01'
+  ORIGINAL_RELEASE_DATE?: string; // '1983-04-18' — the true first-release date; absent for some titles
   EXPLICIT_LYRICS?: string; // '0'
   NB_FAN: number; // 36285
   NUMBER_DISK: string; // '1'
   NUMBER_TRACK: string; // '4'
   PHYSICAL_RELEASE_DATE?: string; // '2014-01-01'
-  PRODUCER_LINE: string; // '℗ 2014 Avicii Music AB'
+  PRODUCER_LINE: string; // '℗ 2014 Avicii Music AB' — may lack the ℗ or be a bare label string
   PROVIDER_ID: string; // '427'
   RANK: string; // '601128'
   RANK_ART: string; // '861905'
   STATUS: string; // '1'
+  SUBTYPES?: {
+    isStudio: boolean;
+    isLive: boolean;
+    isCompilation: boolean;
+    isKaraoke: boolean;
+  };
   TYPE: string; // '1'
   UPC: string; // '602547151544'
   __TYPE__: 'album';

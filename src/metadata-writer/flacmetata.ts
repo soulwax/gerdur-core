@@ -1,90 +1,106 @@
 import Metaflac from '../lib/metaflac-js';
-import type {albumTypePublicApi, trackType} from '../types';
+import type {TrackTagModel} from './model';
 
-export const writeMetadataFlac = (
-  buffer: Buffer,
-  track: trackType,
-  album: albumTypePublicApi | null,
-  dimension: number,
-  cover?: Buffer | null,
-): Buffer => {
+export interface FlacWriteOptions {
+  /** embed the LRC document as a `SYNCEDLYRICS` Vorbis comment. default true */
+  embedSyncedLyrics?: boolean;
+}
+
+/**
+ * Write Vorbis comments + PICTURE blocks from the canonical model. Vorbis
+ * comments are free-form, so every field Deezer gives us lands here — including
+ * multi-valued credits (one comment per value) and synced lyrics.
+ */
+export const writeMetadataFlac = (buffer: Buffer, m: TrackTagModel, options: FlacWriteOptions = {}): Buffer => {
   const flac = new Metaflac(buffer);
-  const RELEASE_YEAR = album ? album.release_date.split('-')[0] : null;
+  const tag = (key: string, value: string | number | undefined | null) => {
+    if (value !== undefined && value !== null && value !== '') flac.setTag(`${key}=${value}`);
+  };
+  const multi = (key: string, values: string[]) => {
+    for (const v of values) if (v) flac.setTag(`${key}=${v}`);
+  };
 
-  flac.setTag('TITLE=' + track.SNG_TITLE);
-  flac.setTag('ALBUM=' + track.ALB_TITLE);
-  flac.setTag('ARTIST=' + track.ARTISTS.map((a) => a.ART_NAME).join(', '));
-  flac.setTag('TRACKNUMBER=' + track.TRACK_NUMBER.toLocaleString('en-US', {minimumIntegerDigits: 2}));
+  tag('TITLE', m.title);
+  tag('SUBTITLE', m.subtitle);
+  if (m.subtitle) tag('VERSION', m.subtitle);
+  tag('ALBUM', m.album);
+  multi('ARTIST', m.artists);
+  multi('ARTISTS', m.artists);
+  tag('ALBUMARTIST', m.albumArtist);
+  multi('COMPOSER', m.composers);
+  multi('LYRICIST', m.lyricists);
+  multi('WRITER', m.lyricists);
+  multi('PRODUCER', m.producers);
+  multi('MIXER', [...m.mixers, ...m.engineers.filter((e) => e.role.startsWith('mixing')).map((e) => e.name)]);
+  multi('PUBLISHER', m.publishers);
+  for (const e of m.engineers) tag('ENGINEER', e.name);
+  // one human-readable line keeping the role breakdown (Picard-style)
+  for (const e of m.engineers) tag('CREDITS', `${e.name} (${e.role})`);
+  for (const p of m.performers) tag('PERFORMER', `${p.name} (${p.role})`);
+  multi('FEATURING', m.featuredArtists);
 
-  if (album) {
-    const TOTALTRACKS = album.nb_tracks.toLocaleString('en-US', {minimumIntegerDigits: 2});
-    if (album.genres.data.length > 0) {
-      for (const genre of album.genres.data) {
-        flac.setTag('GENRE=' + genre.name);
-      }
-    }
-    flac.setTag('TRACKTOTAL=' + TOTALTRACKS);
-    flac.setTag('TOTALTRACKS=' + TOTALTRACKS);
-    flac.setTag('RELEASETYPE=' + album.record_type);
-    flac.setTag('ALBUMARTIST=' + album.artist.name);
-    flac.setTag('BARCODE=' + album.upc);
-    flac.setTag('LABEL=' + album.label);
-    flac.setTag('DATE=' + album.release_date);
-    flac.setTag('YEAR=' + RELEASE_YEAR);
-    flac.setTag(`COMPILATION=${album.artist.name.match(/various/i) ? '1' : '0'}`);
+  tag('TRACKNUMBER', m.trackNumber || '');
+  tag('TRACKTOTAL', m.trackTotal);
+  tag('TOTALTRACKS', m.trackTotal);
+  tag('DISCNUMBER', m.discNumber || '');
+  tag('DISCTOTAL', m.discTotal);
+  tag('TOTALDISCS', m.discTotal);
+
+  tag('ISRC', m.isrc);
+  tag('BARCODE', m.barcode);
+  tag('LENGTH', Math.round(m.durationMs / 1000) || '');
+  if (m.bpm) tag('BPM', m.bpm);
+  tag('MEDIA', 'Digital Media');
+
+  multi('GENRE', m.genres);
+  tag('LABEL', m.label);
+  tag('ORGANIZATION', m.label);
+  tag('RELEASETYPE', m.releaseType);
+  tag('COMPILATION', m.isCompilation ? '1' : '0');
+
+  tag('DATE', m.date);
+  tag('YEAR', m.year);
+  tag('ORIGINALDATE', m.originalDate);
+  tag('ORIGINALYEAR', m.originalYear);
+
+  tag('COPYRIGHT', m.copyright);
+  tag('PRODUCERLINE', m.producerLine);
+
+  tag('REPLAYGAIN_TRACK_GAIN', m.replayGainTrackGain);
+
+  tag('ITUNESADVISORY', m.itunesAdvisory);
+  if (m.explicit !== 'unknown') tag('EXPLICIT', m.explicit === 'explicit' ? '1' : '0');
+
+  // `LYRICS` carries the synced LRC when we have it (players auto-detect the
+  // timestamps); `UNSYNCEDLYRICS` is always the plain fallback.
+  const synced = m.lyricsSynced && options.embedSyncedLyrics !== false ? m.lyricsSynced : null;
+  if (synced || m.lyrics) {
+    tag('LYRICS', synced || m.lyrics);
   }
-
-  if (track.DISK_NUMBER) {
-    flac.setTag('DISCNUMBER=' + track.DISK_NUMBER);
+  if (m.lyrics) {
+    tag('UNSYNCEDLYRICS', m.lyrics);
   }
+  tag('LYRICS_WRITER', m.lyricsWriters);
+  tag('LYRICS_COPYRIGHT', m.lyricsCopyright);
 
-  flac.setTag('ISRC=' + track.ISRC);
-  flac.setTag('LENGTH=' + track.DURATION);
-  flac.setTag('MEDIA=Digital Media');
-
-  if (track.LYRICS) {
-    flac.setTag('LYRICS=' + track.LYRICS.LYRICS_TEXT);
+  if (m.rank !== undefined) tag('DEEZER_RANK', m.rank);
+  tag('SOURCE', 'Deezer');
+  if (m.ids.deezerTrack) {
+    tag('SOURCEID', m.ids.deezerTrack);
+    tag('DEEZER_TRACK_ID', m.ids.deezerTrack);
   }
-  if (track.EXPLICIT_LYRICS) {
-    flac.setTag('EXPLICIT=' + track.EXPLICIT_LYRICS);
-  }
+  tag('DEEZER_ALBUM_ID', m.ids.deezerAlbum);
+  tag('DEEZER_ARTIST_ID', m.ids.deezerArtist);
+  tag('DEEZER_LABEL_ID', m.ids.labelId);
+  tag('DEEZER_PROVIDER_ID', m.ids.providerId);
+  if (m.ids.slug) tag('WEBSITE', `https://www.deezer.com/track/${m.ids.deezerTrack}`);
 
-  if (track.SNG_CONTRIBUTORS && !Array.isArray(track.SNG_CONTRIBUTORS)) {
-    if (track.SNG_CONTRIBUTORS.main_artist) {
-      flac.setTag(`COPYRIGHT=${RELEASE_YEAR ? RELEASE_YEAR + ' ' : ''}${track.SNG_CONTRIBUTORS.main_artist[0]}`);
-    }
-    if (track.SNG_CONTRIBUTORS.publisher) {
-      flac.setTag('ORGANIZATION=' + track.SNG_CONTRIBUTORS.publisher.join(', '));
-    }
-    if (track.SNG_CONTRIBUTORS.composer) {
-      flac.setTag('COMPOSER=' + track.SNG_CONTRIBUTORS.composer.join(', '));
-    }
-    if (track.SNG_CONTRIBUTORS.publisher) {
-      flac.setTag('ORGANIZATION=' + track.SNG_CONTRIBUTORS.publisher.join(', '));
-    }
-    if (track.SNG_CONTRIBUTORS.producer) {
-      flac.setTag('PRODUCER=' + track.SNG_CONTRIBUTORS.producer.join(', '));
-    }
-    if (track.SNG_CONTRIBUTORS.engineer) {
-      flac.setTag('ENGINEER=' + track.SNG_CONTRIBUTORS.engineer.join(', '));
-    }
-    if (track.SNG_CONTRIBUTORS.writer) {
-      flac.setTag('WRITER=' + track.SNG_CONTRIBUTORS.writer.join(', '));
-    }
-    if (track.SNG_CONTRIBUTORS.author) {
-      flac.setTag('AUTHOR=' + track.SNG_CONTRIBUTORS.author.join(', '));
-    }
-    if (track.SNG_CONTRIBUTORS.mixer) {
-      flac.setTag('MIXER=' + track.SNG_CONTRIBUTORS.mixer.join(', '));
-    }
+  if (m.cover) {
+    flac.importPicture(m.cover, m.coverSize, 'image/jpeg', 3, 'Front cover');
   }
-
-  if (cover) {
-    flac.importPicture(cover, dimension, 'image/jpeg');
+  if (m.artistImage) {
+    flac.importPicture(m.artistImage, 1000, 'image/jpeg', 8, 'Artist');
   }
-
-  flac.setTag('SOURCE=Deezer');
-  flac.setTag('SOURCEID=' + track.SNG_ID);
 
   return flac.getBuffer();
 };

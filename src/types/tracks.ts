@@ -5,7 +5,7 @@ interface mediaType {
   HREF: string; // 'https://cdns-preview-d.dzcdn.net/stream/c-deda7fa9316d9e9e880d2c6207e92260-8.mp3';
 }
 
-interface lyricsSync {
+export interface lyricsSync {
   lrc_timestamp: string; //'[00:03.58]',
   milliseconds: string; // '3580',
   duration: string; // '8660',
@@ -19,6 +19,16 @@ export interface lyricsType {
   LYRICS_COPYRIGHTS?: string;
   LYRICS_WRITERS?: string;
 }
+
+/**
+ * `SNG_CONTRIBUTORS` as Deezer actually ships it: a bag of role -> names.
+ * The role keys are inconsistent across the catalogue — `main_artist` vs
+ * `mainartist` vs `artist`, `musicpublisher` vs `music publisher` — and the
+ * whole thing is sometimes an empty array. Normalise with
+ * `normalizeContributors()` from `metadata-writer/contributors` rather than
+ * reading keys directly.
+ */
+export type sngContributors = {[role: string]: string[]} | [];
 
 interface songType {
   ALB_ID: string; // '302127'
@@ -44,19 +54,7 @@ interface songType {
   SMARTRADIO: string; // 0
   SNG_ID: string; // '3135556'
   SNG_TITLE: string; // 'Harder, Better, Faster, Stronger'
-  SNG_CONTRIBUTORS?:
-    | {
-        main_artist: string[]; //['Daft Punk']
-        author?: string[]; // ['Edwin Birdsong', 'Guy-Manuel de Homem-Christo', 'Thomas Bangalter']
-        composer?: string[];
-        musicpublisher?: string[];
-        producer?: string[];
-        publisher: string[];
-        engineer?: string[];
-        writer?: string[];
-        mixer?: string[];
-      }
-    | [];
+  SNG_CONTRIBUTORS?: sngContributors;
   STATUS: number; // 3
   S_MOD: number; // 0
   S_PREMIUM: number; // 0

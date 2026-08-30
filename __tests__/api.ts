@@ -216,9 +216,11 @@ if (process.env.CI) {
     t.true(Buffer.isBuffer(decryptedTrack));
     t.is(decryptedTrack.length, 3596119);
 
-    const trackWithMetadata = await api.addTrackTags(decryptedTrack, track, 500);
+    const {buffer: trackWithMetadata, model} = await api.addTrackTags(decryptedTrack, track, {coverSize: 500});
     t.true(Buffer.isBuffer(trackWithMetadata));
-    t.is(trackWithMetadata.length, 3629133);
+    t.true(trackWithMetadata.length > decryptedTrack.length, 'tags were added');
+    t.is(model.isrc, 'GBDUW0000059');
+    t.true(model.replayGainTrackGain?.endsWith(' dB'));
   });
 
   // test('TRACK128 WITHOUT ALBUM INFO', async (t) => {
@@ -256,9 +258,9 @@ if (process.env.CI) {
     t.true(Buffer.isBuffer(decryptedTrack));
     t.is(decryptedTrack.length, 8990301);
 
-    const trackWithMetadata = await api.addTrackTags(decryptedTrack, track, 500);
+    const {buffer: trackWithMetadata} = await api.addTrackTags(decryptedTrack, track, {coverSize: 500});
     t.true(Buffer.isBuffer(trackWithMetadata));
-    t.is(trackWithMetadata.length, 9023315);
+    t.true(trackWithMetadata.length > decryptedTrack.length, 'tags were added');
   });
 
   test('DOWNLOAD TRACK1411 & ADD METADATA', async (t) => {
@@ -275,9 +277,11 @@ if (process.env.CI) {
     t.true(Buffer.isBuffer(decryptedTrack));
     t.is(data.length, 25418289);
 
-    const trackWithMetadata = await api.addTrackTags(decryptedTrack, track, 500);
+    const {buffer: trackWithMetadata, model} = await api.addTrackTags(decryptedTrack, track, {coverSize: 500});
     t.true(Buffer.isBuffer(trackWithMetadata));
-    t.is(trackWithMetadata.length, 25453343);
+    t.is(trackWithMetadata.slice(0, 4).toString('ascii'), 'fLaC', 'still a FLAC');
+    t.true(trackWithMetadata.length > decryptedTrack.length, 'tags were added');
+    t.true(model.genres.length > 0, 'genres resolved from album');
   });
 } else {
   test('GET MUSIXMATCH LYRICS', async (t) => {

@@ -1,137 +1,113 @@
 // @ts-ignore
 import id3Writer from 'browser-id3-writer';
-import type {albumTypePublicApi, trackType} from '../types';
+import type {TrackTagModel} from './model';
 
-export const writeMetadataMp3 = (
-  buffer: Buffer,
-  track: trackType,
-  album: albumTypePublicApi | null,
-  cover?: Buffer | null,
-): Buffer => {
-  const writer = new id3Writer(buffer);
-  const RELEASE_DATES = album && album.release_date.split('-');
+const join = (arr: string[]) => arr.filter(Boolean).join('; ');
 
-  writer
-    .setFrame('TIT2', track.SNG_TITLE)
-    .setFrame('TALB', track.ALB_TITLE)
-    .setFrame(
-      'TPE1',
-      track.ARTISTS.map((a) => a.ART_NAME),
-    )
-    .setFrame('TLEN', Number(track.DURATION) * 1000)
-    .setFrame('TSRC', track.ISRC);
+/**
+ * Write an ID3v2.3 tag from the canonical model. `browser-id3-writer` is a v2.3
+ * writer, so there is no `SYLT` (synced lyrics) or `TDRC`/`TDOR` — synced lyrics
+ * ship as a `.lrc` sidecar from the CLI, and dates use `TYER`/`TDAT` plus
+ * `TXXX:ORIGINALDATE`.
+ */
+export const writeMetadataMp3 = (buffer: Buffer, m: TrackTagModel): Buffer => {
+  const w = new id3Writer(buffer);
+  const txxx = (description: string, value: string | string[]) => {
+    const v = Array.isArray(value) ? join(value) : value;
+    if (v) w.setFrame('TXXX', {description, value: v});
+  };
 
-  if (album) {
-    if (album.genres.data.length > 0) {
-      writer.setFrame(
-        'TCON',
-        album.genres.data.map((g) => g.name),
-      );
-    }
-    if (RELEASE_DATES) {
-      writer.setFrame('TYER', RELEASE_DATES[0]).setFrame('TDAT', RELEASE_DATES[2] + RELEASE_DATES[1]);
-    }
-    writer
-      .setFrame('TPE2', album.artist.name)
-      .setFrame('TXXX', {
-        description: 'RELEASETYPE',
-        value: album.record_type,
-      })
-      .setFrame('TXXX', {
-        description: 'BARCODE',
-        value: album.upc,
-      })
-      .setFrame('TXXX', {
-        description: 'LABEL',
-        value: album.label,
-      })
-      .setFrame('TXXX', {
-        description: 'COMPILATION',
-        value: album.artist.name.match(/various/i) ? '1' : '0',
-      });
+  w.setFrame('TIT2', m.title);
+  if (m.subtitle) w.setFrame('TIT3', m.subtitle);
+  w.setFrame('TALB', m.album);
+  if (m.artists.length) w.setFrame('TPE1', m.artists);
+  if (m.albumArtist) w.setFrame('TPE2', m.albumArtist);
+  if (m.composers.length) w.setFrame('TCOM', m.composers);
+  if (m.lyricists.length) w.setFrame('TEXT', join(m.lyricists));
+  if (m.mixers.length) w.setFrame('TPE4', join(m.mixers));
+  if (m.genres.length) w.setFrame('TCON', m.genres);
+  if (m.label) w.setFrame('TPUB', m.label);
+  if (m.isrc) w.setFrame('TSRC', m.isrc);
+  if (m.durationMs) w.setFrame('TLEN', m.durationMs);
+  if (m.bpm) w.setFrame('TBPM', Math.round(m.bpm));
+  w.setFrame('TMED', 'Digital Media');
+
+  if (m.trackNumber) {
+    w.setFrame('TRCK', m.trackTotal ? `${m.trackNumber}/${m.trackTotal}` : String(m.trackNumber));
+  }
+  if (m.discNumber) {
+    w.setFrame('TPOS', m.discTotal ? `${m.discNumber}/${m.discTotal}` : String(m.discNumber));
   }
 
-  writer
-    .setFrame('TMED', 'Digital Media')
-    .setFrame('TXXX', {
-      description: 'SOURCE',
-      value: 'Deezer',
-    })
-    .setFrame('TXXX', {
-      description: 'SOURCEID',
-      value: track.SNG_ID,
-    });
+  if (m.year) w.setFrame('TYER', Number(m.year));
+  if (m.date && /^\d{4}-\d{2}-\d{2}$/.test(m.date)) {
+    const [, mm, dd] = m.date.split('-');
+    w.setFrame('TDAT', Number(dd + mm));
+  }
+  if (m.copyright) w.setFrame('TCOP', m.copyright);
 
-  if (track.DISK_NUMBER) {
-    const TRACK_NUMBER = track.TRACK_NUMBER.toLocaleString('en-US', {minimumIntegerDigits: 2});
-    writer.setFrame('TPOS', track.DISK_NUMBER).setFrame(
-      'TRCK',
-      album
-        ? `${TRACK_NUMBER}/${album.nb_tracks.toLocaleString('en-US', {
-            minimumIntegerDigits: 2,
-          })}`
-        : TRACK_NUMBER,
+  // v2.3 has no native frames for these — user-defined text, Picard-compatible keys
+  txxx('DATE', m.date || '');
+  txxx('ORIGINALDATE', m.originalDate || '');
+  txxx('ORIGINALYEAR', m.originalYear || '');
+  txxx('BARCODE', m.barcode || '');
+  if (m.bpm) txxx('BPM', String(m.bpm));
+  txxx('RELEASETYPE', m.releaseType || '');
+  txxx('COMPILATION', m.isCompilation ? '1' : '0');
+  txxx('ITUNESADVISORY', String(m.itunesAdvisory));
+  if (m.explicit !== 'unknown') txxx('EXPLICIT', m.explicit === 'explicit' ? '1' : '0');
+  if (m.replayGainTrackGain) txxx('REPLAYGAIN_TRACK_GAIN', m.replayGainTrackGain);
+  if (m.artists.length > 1) txxx('ARTISTS', m.artists);
+  if (m.featuredArtists.length) txxx('FEATURING', m.featuredArtists);
+  txxx('PRODUCER', m.producers);
+  txxx('MIXER', m.mixers);
+  txxx('PUBLISHER', m.publishers);
+  if (m.engineers.length) {
+    txxx(
+      'ENGINEER',
+      m.engineers.map((e) => e.name),
+    );
+    txxx(
+      'INVOLVEDPEOPLE',
+      m.engineers.map((e) => `${e.name} (${e.role})`),
     );
   }
+  if (m.performers.length) {
+    txxx(
+      'PERFORMER',
+      m.performers.map((p) => `${p.name} (${p.role})`),
+    );
+  }
+  if (m.lyricsWriters) txxx('LYRICIST', m.lyricsWriters);
+  if (m.lyricsCopyright) txxx('LYRICS_COPYRIGHT', m.lyricsCopyright);
+  if (m.producerLine) txxx('PRODUCERLINE', m.producerLine);
+  if (m.rank !== undefined) txxx('DEEZER_RANK', String(m.rank));
 
-  if (track.SNG_CONTRIBUTORS && !Array.isArray(track.SNG_CONTRIBUTORS)) {
-    if (track.SNG_CONTRIBUTORS.main_artist) {
-      writer.setFrame('TCOP', `${RELEASE_DATES ? RELEASE_DATES[0] + ' ' : ''}${track.SNG_CONTRIBUTORS.main_artist[0]}`);
-    }
-    if (track.SNG_CONTRIBUTORS.publisher) {
-      writer.setFrame('TPUB', track.SNG_CONTRIBUTORS.publisher.join(', '));
-    }
-    if (track.SNG_CONTRIBUTORS.composer) {
-      writer.setFrame('TCOM', track.SNG_CONTRIBUTORS.composer);
-    }
+  txxx('SOURCE', 'Deezer');
+  if (m.ids.deezerTrack) {
+    txxx('SOURCEID', m.ids.deezerTrack);
+    txxx('DEEZER_TRACK_ID', m.ids.deezerTrack);
+    w.setFrame('WOAS', `https://www.deezer.com/track/${m.ids.deezerTrack}`);
+  }
+  if (m.ids.deezerAlbum) txxx('DEEZER_ALBUM_ID', m.ids.deezerAlbum);
+  if (m.ids.deezerArtist) {
+    txxx('DEEZER_ARTIST_ID', m.ids.deezerArtist);
+    w.setFrame('WOAR', `https://www.deezer.com/artist/${m.ids.deezerArtist}`);
+  }
+  if (m.ids.labelId) txxx('DEEZER_LABEL_ID', m.ids.labelId);
+  if (m.ids.providerId) txxx('DEEZER_PROVIDER_ID', m.ids.providerId);
 
-    if (track.SNG_CONTRIBUTORS.writer) {
-      writer.setFrame('TXXX', {
-        description: 'LYRICIST',
-        value: track.SNG_CONTRIBUTORS.writer.join(', '),
-      });
-    }
-    if (track.SNG_CONTRIBUTORS.author) {
-      writer.setFrame('TXXX', {
-        description: 'AUTHOR',
-        value: track.SNG_CONTRIBUTORS.author.join(', '),
-      });
-    }
-    if (track.SNG_CONTRIBUTORS.mixer) {
-      writer.setFrame('TXXX', {
-        description: 'MIXARTIST',
-        value: track.SNG_CONTRIBUTORS.mixer.join(', '),
-      });
-    }
-    if (track.SNG_CONTRIBUTORS.producer && track.SNG_CONTRIBUTORS.engineer) {
-      writer.setFrame('TXXX', {
-        description: 'INVOLVEDPEOPLE',
-        value: track.SNG_CONTRIBUTORS.producer.concat(track.SNG_CONTRIBUTORS.engineer).join(', '),
-      });
-    }
+  if (m.lyrics) {
+    w.setFrame('USLT', {description: '', lyrics: m.lyrics, language: 'eng'});
   }
 
-  if (track.LYRICS) {
-    writer.setFrame('USLT', {
-      description: '',
-      lyrics: track.LYRICS.LYRICS_TEXT,
-    });
+  if (m.cover) {
+    w.setFrame('APIC', {type: 3, data: m.cover, description: 'Front cover'});
   }
-  if (track.EXPLICIT_LYRICS) {
-    writer.setFrame('TXXX', {
-      description: 'EXPLICIT',
-      value: track.EXPLICIT_LYRICS,
-    });
+  if (m.artistImage) {
+    w.setFrame('APIC', {type: 8, data: m.artistImage, description: 'Artist'});
   }
 
-  if (cover) {
-    writer.setFrame('APIC', {
-      type: 3,
-      data: cover,
-      description: '',
-    });
-  }
-
-  writer.addTag();
-  return Buffer.isBuffer(writer.arrayBuffer) ? writer.arrayBuffer : Buffer.from(writer.arrayBuffer);
+  w.addTag();
+  return Buffer.isBuffer(w.arrayBuffer) ? w.arrayBuffer : Buffer.from(w.arrayBuffer);
 };

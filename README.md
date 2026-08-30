@@ -68,11 +68,14 @@ const data = await downloadBuffer(trackData.trackUrl);
 // Decrypt track if needed
 const outFile = trackData.isEncrypted ? api.decryptDownload(data, track.SNG_ID) : data;
 
-// Add id3 metadata
-const trackWithMetadata = await api.addTrackTags(outFile, track, 500);
+// Add metadata — resolves album info, credits, lyrics and cover from Deezer
+const {buffer, model} = await api.addTrackTags(outFile, track, {coverSize: 500});
 
 // Save file to disk
-fs.writeFileSync(track.SNG_TITLE + '.mp3', trackWithMetadata);
+fs.writeFileSync(track.SNG_TITLE + '.mp3', buffer);
+
+// Time-synced lyrics, when Deezer has them, come back as an LRC document
+if (model.lyricsSynced) fs.writeFileSync(track.SNG_TITLE + '.lrc', model.lyricsSynced);
 ```
 
 ### [Read FAQ](docs/faq.md)
@@ -173,13 +176,18 @@ All method returns `Object` or throws `Error`. Make sure to catch error on your 
 | `data`     |   Yes    | `buffer` | downloaded song buffer |
 | `song_id`  |   Yes    | `string` |               track id |
 
-### `.addTrackTags(data, track,coverSize)`
+### `.addTrackTags(data, track, options?)`
 
-| Parameters  | Required |      Type |            Description |
-| ----------- | :------: | --------: | ---------------------: |
-| `data`      |   Yes    |  `buffer` | downloaded song buffer |
-| `track`     |   Yes    |  `string` |           track object |
-| `coverSize` |    No    | `56-1800` |         cover art size |
+Resolves album info, credits, lyrics and artwork from Deezer and writes them into
+the audio (ID3v2.3 for MP3, Vorbis comments for FLAC). Returns
+`{buffer, model}` — `model` is the full `TrackTagModel`, including
+`model.lyricsSynced` (an LRC document) when the track has time-synced lyrics.
+
+| Parameters | Required |     Type | Description                                    |
+| ---------- | :------: | -------: | --------------------------------------------- |
+| `data`     |   Yes    | `buffer` | downloaded, decrypted song buffer             |
+| `track`    |   Yes    | `object` | track object from `getTrackInfo` / `parseInfo` |
+| `options`  |    No    | `object` | `AddTrackTagsOptions` — `coverSize` (56–1800), pre-fetched `album`/`lyrics`/`cover`, and toggles (`richCredits`, `embedArtistImage`, `deezerIds`, …) |
 
 ###
 

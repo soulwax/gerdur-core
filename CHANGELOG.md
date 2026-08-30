@@ -1,5 +1,56 @@
 # Changelog
 
+## 2.0.0 - 2026-08-31
+
+Metadata overhaul — extract everything Deezer actually exposes for a track.
+
+### Breaking
+
+- **`addTrackTags(buffer, track, options)`** — the third argument is now an
+  options object, not a cover-size number, and it resolves to
+  **`{buffer, model}`** instead of a bare `Buffer`. Migrate:
+  `await addTrackTags(buf, track, 500)` → `(await addTrackTags(buf, track, {coverSize: 500})).buffer`.
+  `model` is the full `TrackTagModel` (all resolved fields + `model.lyricsSynced`,
+  an LRC document).
+- `writeMetadataMp3` / `writeMetadataFlac` now take the `TrackTagModel`, not a
+  raw track + public-album payload.
+- `downloadAlbumCover` clamps its size to Deezer's real ceiling of **1800**
+  (was unbounded); `coverSize` is re-exported from here.
+
+### Added
+
+- **ReplayGain** — `GAIN` (present on every `song.getData`) is written as
+  `REPLAYGAIN_TRACK_GAIN` (`TXXX` on MP3, Vorbis comment on FLAC).
+- **Rich credits** via `normalizeContributors()` — `SNG_CONTRIBUTORS` has
+  inconsistent keys across the catalogue (`main_artist` / `mainartist` / `artist`,
+  `music publisher` with a space, …); this normalises them and surfaces
+  `featuring`, mastering / mixing / recording engineers, producers, mixers,
+  performers.
+- **Featured artists** from `SNG_CONTRIBUTORS.featuring` → `TXXX:FEATURING` /
+  `FEATURING`, plus a combined `ARTISTS` tag.
+- **Original release date** — `getRichAlbum()` merges gw `album.getData`
+  (`ORIGINAL_RELEASE_DATE`, `COPYRIGHT`/`PRODUCER_LINE`, `NUMBER_DISK`,
+  `SUBTYPES`) with the public `/album/` (label, genres, record type). Writes
+  `ORIGINALDATE`/`ORIGINALYEAR` distinct from the reissue `DATE`.
+- **BPM** from the public `/track/` endpoint (`TBPM` + precise `TXXX:BPM`).
+- **Synced lyrics** — `toLrc()` renders `LYRICS_SYNC_JSON` (already fetched with
+  the plain lyrics) as an LRC document, exposed on `model.lyricsSynced` and
+  embedded in FLAC `LYRICS`.
+- Real `©` / `℗` lines, disc totals, compilation/live flags from `SUBTYPES`,
+  proper `EXPLICIT_LYRICS_STATUS` enum handling (`1`/`4` = explicit; `2`/`6` =
+  unknown, not "explicit"), `iTunesAdvisory`, Deezer track/album/artist/label/
+  provider ids, `URL_REWRITING` slug, popularity rank, and the artist photo as a
+  second embedded picture.
+- New exports: `getRichAlbum`, `RichAlbum`, `normalizeContributors`,
+  `NormalizedContributors`, `toLrc`, `buildTagModel`, `TrackTagModel`, `Person`,
+  `AddTrackTagsOptions`, `TaggedTrack`, `downloadArtistImage`, `MAX_COVER_SIZE`.
+
+### Changed
+
+- Album/playlist tracks (which come without `SNG_CONTRIBUTORS` / `VERSION` /
+  `GAIN`) are transparently hydrated with one coalesced `song.getData` before
+  tagging. Disable via `addTrackTags(…, {richCredits: false})`.
+
 ## 1.0.4 - 2026-08-31
 
 ### Added

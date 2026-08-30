@@ -280,9 +280,11 @@ class Metaflac {
    *
    * @param {string} filename
    */
-  importPicture(picture: Buffer, dimension: number, mime: 'image/jpeg' | 'image/png') {
+  importPicture(picture: Buffer, dimension: number, mime: 'image/jpeg' | 'image/png', type = 3, description = '') {
     const spec = this.buildSpecification({
+      type,
       mime,
+      description,
       width: dimension,
       height: dimension,
     });
