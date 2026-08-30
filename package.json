@@ -1,0 +1,69 @@
+{
+  "name": "gerdur-core",
+  "version": "1.0.1",
+  "description": "Core module for gerdur.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "lint": "node ./node_modules/eslint/bin/eslint.js --config .eslintrc.js --resolve-plugins-relative-to . .",
+    "prepublishOnly": "npm run lint && tsc",
+    "prebuild": "npm run lint",
+    "build": "tsc",
+    "test": "ava"
+  },
+  "files": [
+    "dist/**/*",
+    "types/**/*",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=12"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/soulwax/gerdur-core.git"
+  },
+  "homepage": "https://github.com/soulwax/gerdur-core#readme",
+  "bugs": {
+    "url": "https://github.com/soulwax/gerdur-core/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "Christian",
+  "license": "SEE LICENSE IN LICENSE",
+  "dependencies": {
+    "browser-id3-writer": "^4.4.0",
+    "delay": "^5.0.0",
+    "node-html-parser": "^5.3.3",
+    "p-queue": "^6.6.2",
+    "spotify-uri": "^2.2.0",
+    "spotify-web-api-node": "^5.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^17.0.23",
+    "@types/spotify-web-api-node": "^5.0.3",
+    "@typescript-eslint/eslint-plugin": "^5.16.0",
+    "@typescript-eslint/parser": "^5.16.0",
+    "ava": "^4.1.0",
+    "eslint": "^8.11.0",
+    "eslint-plugin-prettier": "^4.0.0",
+    "prettier": "^2.6.0",
+    "ts-node": "^10.7.0",
+    "typescript": "^4.6.3"
+  },
+  "ava": {
+    "extensions": [
+      "ts"
+    ],
+    "files": [
+      "!dist",
+      "!__tests__/helpers.ts"
+    ],
+    "require": [
+      "ts-node/register"
+    ],
+    "timeout": "2m",
+    "verbose": true
+  }
+}
