@@ -32,6 +32,23 @@ export const shouldSkipBecauseUnavailable = (err: unknown, statuses: number[], f
   return statuses.includes(status ?? -1) || fragments.some((fragment) => message.includes(fragment));
 };
 
+/**
+ * Deezer's public REST API throttles bursts with `code: 4` ("Quota exceeded")
+ * and HTTP 429. Passing/skipping on that keeps the live-API suite green when it
+ * runs many public-API tests in parallel.
+ */
+export const skipIfRateLimited = (t: TestContext, err: unknown): boolean => {
+  const message = getErrorMessage(err);
+  const status = getErrorStatus(err);
+  const rateLimited =
+    status === 429 || (err as {code?: unknown})?.code === 4 || /Quota|quota exceeded|too many requests/i.test(message);
+  if (rateLimited) {
+    skipWithReason(t, `Skipping: Deezer public API is rate-limiting (${message.slice(0, 80)}).`);
+    return true;
+  }
+  return false;
+};
+
 export const ensureDeezerUserAuth = async (t: TestContext): Promise<boolean> => {
   if (!process.env.HIFI_ARL) {
     skipWithReason(t, 'Skipping auth-required Deezer test because HIFI_ARL is not set.');

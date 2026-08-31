@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.6.0 - 2026-08-31
+
+Phase 2.4 round 2 — Flow, radios, and a user's library. All public REST, all
+memoised, all additive.
+
+### Added
+
+- **Flow / library** (take a `userId`): `getUserFlow`, `getUserFavoriteTracks`
+  (with `time_add`), `getUserFavoriteAlbums`, `getUserFavoriteArtists`,
+  `getUserPlaylists`, `getUserRadios`, `getUserChartTracks`.
+- **Radios**: `getRadios`, `getRadioTracks(radioId)`, `getRadioGenres`.
+- New types: `userFavoriteTrack`, `userFavoriteAlbum`, `userFavoriteArtist`,
+  `userPlaylistResult`, `radioResult`, `radioGenre`.
+
+### Internal
+
+- Tests run under `ts-node/register/transpile-only` (build still type-checks) —
+  the growing live-API suite was hitting the ts-node worker heap limit.
+- Live-API tests skip cleanly on Deezer's `code: 4` "Quota limit exceeded"
+  instead of failing when the suite bursts the public API.
+
 ## 2.5.0 - 2026-08-31
 
 Phase 3.1 — streaming download primitives. Additive.

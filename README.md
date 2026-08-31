@@ -244,6 +244,31 @@ const track = await getTrackByISRC('USUM71311296');      // "Get Lucky"
 pass the `id` to `getTrackInfo` / `getAlbumTracks` (or use the converter's
 `isrc2deezer` / `upc2deezer`, which hydrate a gw track for you).
 
+### Flow, radios & a user's library
+
+Public-profile data — pass a `userId` (`getUser().USER_ID`, a profile URL, or
+`parseInfo`). A private library is only visible to that user's own session.
+
+| Method | Returns |
+| :--- | :--- |
+| `getUserFlow(userId, limit = 40)` | **Flow** — the endless personalised mix, as tracks. |
+| `getUserFavoriteTracks(userId, limit?, index?)` | loved tracks, newest first (each with `time_add`). |
+| `getUserFavoriteAlbums(userId, limit?, index?)` | favourite albums. |
+| `getUserFavoriteArtists(userId, limit?, index?)` | favourite artists. |
+| `getUserPlaylists(userId, limit?, index?)` | the user's own + followed playlists. |
+| `getUserRadios(userId)` | radios the user favourited. |
+| `getUserChartTracks(userId, limit?)` | the user's personal top tracks. |
+| `getRadios()` | Deezer's curated radio list. |
+| `getRadioTracks(radioId)` | a radio's current tracklist — a ready-to-play source. |
+| `getRadioGenres()` | radios grouped by genre. |
+
+```js
+const me = await getUser();
+const {data: flow} = await getUserFlow(me.USER_ID);       // your Flow
+const {data: loved} = await getUserFavoriteTracks(me.USER_ID);
+const {data: eighties} = await getRadioTracks(38305);     // "The '80s"
+```
+
 ### `.getTrackDownloadUrl(track, quality);`
 
 | Parameters | Required |        Type |                        Description |
