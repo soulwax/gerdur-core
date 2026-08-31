@@ -1,6 +1,5 @@
 import {PassThrough, Readable} from 'stream';
 import {createDecryptStream} from './decrypt';
-import {createPooledDecryptStream} from './decrypt-pool';
 import {getStream} from './http';
 import {getTrackDownloadUrl} from './get-url';
 import type {Session} from './session';
@@ -19,13 +18,6 @@ export interface StreamTrackOptions {
   onProgress?: (received: number, total: number) => void;
   /** which account to download as — defaults to the process default session */
   session?: Session;
-  /**
-   * Decrypt on a worker pool instead of the event loop. Off by default — a
-   * single download is better off without the thread. Worth it for a server
-   * running several at once: measured 2.6x the decrypt throughput and 4.5x less
-   * p95 event-loop lag. Tune with `configureDecryptPool`.
-   */
-  pool?: boolean;
 }
 
 export interface TrackStream {
@@ -68,11 +60,6 @@ export const streamTrackDownload = async (
   const contentLength = Number(headers['content-length']) || 0;
   const size = resolved.fileSize || (contentLength ? contentLength + startedAt : 0);
 
-  const decryptStream = () =>
-    options.pool
-      ? createPooledDecryptStream(track.SNG_ID, startedAt / CHUNK)
-      : createDecryptStream(track.SNG_ID, startedAt / CHUNK);
-
   let received = startedAt;
   if (options.onProgress) {
     const meter = new PassThrough();
@@ -82,7 +69,7 @@ export const streamTrackDownload = async (
     });
     raw.pipe(meter);
     return {
-      stream: resolved.isEncrypted ? meter.pipe(decryptStream()) : meter,
+      stream: resolved.isEncrypted ? meter.pipe(createDecryptStream(track.SNG_ID, startedAt / CHUNK)) : meter,
       size,
       startedAt,
       isEncrypted: resolved.isEncrypted,
@@ -90,7 +77,7 @@ export const streamTrackDownload = async (
   }
 
   return {
-    stream: resolved.isEncrypted ? raw.pipe(decryptStream()) : raw,
+    stream: resolved.isEncrypted ? raw.pipe(createDecryptStream(track.SNG_ID, startedAt / CHUNK)) : raw,
     size,
     startedAt,
     isEncrypted: resolved.isEncrypted,
