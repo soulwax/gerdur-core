@@ -1,4 +1,5 @@
 import delay from 'delay';
+import {sharedGatewayCache, sharedInFlight} from './caches';
 import {DeezerError} from './errors';
 import type {DeezerErrorPayload} from './errors';
 import FastLRU from './fast-lru';
@@ -56,6 +57,28 @@ const backoffDelay = (attempt: number): number => {
 
 /** How long a loaded `deezer.getUserData` payload is trusted before a refresh. */
 const USER_DATA_TTL_MS = 25 * 60 * 1000;
+
+/**
+ * gw methods whose payloads carry **no account-scoped fields**, so one copy can
+ * serve every session instead of one copy per session.
+ *
+ * The account-scoped field that matters is `TRACK_TOKEN`, and it appears on
+ * exactly two response shapes — `trackType` and `showEpisodeType`. None of the
+ * methods below embed either, so their results are identical for every account
+ * in a given country. Everything else (`song.getData`, `playlist.getSongs`,
+ * `song.getListByAlbum`, `song.getListData`, `episode.getData`, `mobile.*`,
+ * `deezer.pageSearch`, `user_getInfo`, …) stays in the per-session cache.
+ *
+ * The shared key is prefixed with the session's country, so a multi-region
+ * deployment never serves one country's availability view to another.
+ */
+const ACCOUNT_INDEPENDENT_GW = new Set([
+  'album.getData', // albumType
+  'artist.getData', // artistInfoType
+  'song.getLyrics', // lyricsType
+  'album.getDiscography', // discographyType -> albumType[]
+  'playlist.getData', // playlistInfo — metadata only (playlist.getSongs is NOT shared)
+]);
 
 type SessionRequestConfig = {
   headers?: Record<string, string>;
@@ -281,40 +304,58 @@ export class Session {
 
   // ─── Cached request primitives ──────────────────────────────────────────────
 
-  /** Single-flight + LRU around a fetcher, keyed per session. */
-  private coalesce<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
-    const cached = this.cache.get(key);
+  /**
+   * Single-flight + LRU around a fetcher.
+   *
+   * `shared` routes to the process-wide cache and in-flight map instead of this
+   * session's — used for gw methods whose payloads carry nothing account-scoped
+   * (see {@link ACCOUNT_INDEPENDENT_GW}). Two sessions asking for the same album
+   * concurrently then share one request rather than issuing one each.
+   */
+  private coalesce<T>(key: string, fetcher: () => Promise<T>, shared = false): Promise<T> {
+    const cache: {get(k: string): any; set(k: string, v: any): void} = shared ? sharedGatewayCache : this.cache;
+    const inFlight = shared ? sharedInFlight : this.inFlight;
+
+    const cached = cache.get(key);
     if (cached) {
       return Promise.resolve(cached);
     }
-    const pending = this.inFlight.get(key);
+    const pending = inFlight.get(key);
     if (pending) {
       return pending;
     }
     const promise = (async () => {
       try {
-        return await fetcher();
+        const value = await fetcher();
+        cache.set(key, value);
+        return value;
       } finally {
-        this.inFlight.delete(key);
+        inFlight.delete(key);
       }
     })();
-    this.inFlight.set(key, promise);
+    inFlight.set(key, promise);
     return promise;
   }
 
   /** POST `gateway.php` — the main gw method channel. Coalesced + cached. */
   gw<T = any>(body: Record<string, unknown>, method: string): Promise<T> {
-    const key = `gw:${method}:${Object.entries(body).join(':')}`;
-    return this.coalesce(key, async () => {
-      const {
-        data: {error, results},
-      } = await this.request<any>('POST', '/gateway.php', body, {params: {method}} as SessionRequestConfig);
-      if (results && Object.keys(results).length > 0) {
-        this.cache.set(key, results);
-        return results;
-      }
-      throw new DeezerError(error);
-    });
+    const shared = ACCOUNT_INDEPENDENT_GW.has(method);
+    const key = shared
+      ? `${this.country ?? 'XX'}:gw:${method}:${Object.entries(body).join(':')}`
+      : `gw:${method}:${Object.entries(body).join(':')}`;
+    return this.coalesce(
+      key,
+      async () => {
+        const {
+          data: {error, results},
+        } = await this.request<any>('POST', '/gateway.php', body, {params: {method}} as SessionRequestConfig);
+        if (results && Object.keys(results).length > 0) {
+          return results;
+        }
+        throw new DeezerError(error);
+      },
+      shared,
+    );
   }
 
   /** POST `gw-light.php` — the lighter method channel (search, suggest, …). */
@@ -327,7 +368,6 @@ export class Session {
         params: {method, api_version: '1.0'},
       } as SessionRequestConfig);
       if (results && Object.keys(results).length > 0) {
-        this.cache.set(key, results);
         return results;
       }
       throw new DeezerError(error);
@@ -344,7 +384,6 @@ export class Session {
         params: {method, ...params},
       } as SessionRequestConfig);
       if (results && Object.keys(results).length > 0) {
-        this.cache.set(cacheKey, results);
         return results;
       }
       throw new DeezerError(error);

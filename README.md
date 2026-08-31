@@ -55,6 +55,7 @@ the CLI and the file-writing layer on top.
   - [Tag MP3 / FLAC](#tag-mp3--flac)
   - [Enrichment (MusicBrainz + Cover Art Archive)](#enrichment)
   - [Use multiple accounts](#use-multiple-accounts)
+  - [Running this on a server](#running-this-on-a-server)
   - [HTTP helpers](#http-helpers)
 - [Errors](#errors)
 - [Types](#types)
@@ -604,6 +605,38 @@ and the raw channels (`gw`, `gwLight`, `gwGet`).
 in tests). The free `getTrackDownloadUrl` / `resolveDownloadUrls` /
 `streamTrackDownload` / `refreshTrackTokens` all take an optional `session`.
 
+**Caching across sessions.** Most gw payloads embed a per-account `TRACK_TOKEN`,
+so each `Session` has its own response cache. Five methods carry nothing
+account-scoped — `album.getData`, `artist.getData`, `song.getLyrics`,
+`album.getDiscography`, `playlist.getData` — and those go to a **process-wide
+cache partitioned by country**, so one copy serves every session and a
+concurrent burst collapses into one request. Measured with 500 sessions reading
+the same album: **500 gateway requests → 1**, and 1.8 MB of duplicated payload →
+one copy. Track lists (`song.getData`, `playlist.getSongs`, `song.getListByAlbum`,
+`episode.getData`, …) are never shared.
+
+```ts
+import {configureCache, cacheStats, clearSharedCaches} from 'gerdur-core';
+
+configureCache({shared: {maxSize: 20_000, ttl: 30 * 60_000}}); // once, at startup
+cacheStats(); // {shared: {size, maxSize, hits, misses, inFlight}} — for /metrics
+```
+
+### Running this on a server
+
+- **Stream, don't buffer.** `downloadTrackBuffer` / `getTrackBuffer` hold the
+  whole file (and `Buffer.concat` doubles it briefly) — fine for a script, a
+  memory bomb at concurrency. Use `streamTrackDownload` in a request path.
+- **Decryption runs on the event loop.** Blowfish costs ~33 ms per 8 MiB
+  (~243 MiB/s), so heavy concurrent traffic will compete with everything else in
+  the process. Put the decrypt in a worker if you saturate a core.
+- **Size the shared cache** to your catalogue with `configureCache`, and export
+  `cacheStats()` so you can see the hit rate.
+- **Evict idle sessions yourself.** `createSession` has no lifecycle — a session
+  per user, kept forever, keeps its cache forever.
+- `httpAgent` / `httpsAgent` are process-global (`maxSockets: 64`) and shared
+  between API calls and CDN downloads.
+
 ### HTTP helpers
 
 The zero-dependency HTTP client (`get`/`post`/`head`, redirects, gzip/br/deflate,
@@ -759,7 +792,8 @@ import type {
 <details>
 <summary><b>HTTP &amp; errors</b></summary>
 
-`getJson` · `getText` · `getBuffer` · `getStream` · `HttpClient` · `httpAgent` ·
+`configureCache` · `cacheStats` · `clearSharedCaches` · `getJson` · `getText` ·
+`getBuffer` · `getStream` · `HttpClient` · `httpAgent` ·
 `httpsAgent` · `HttpStatusError` · `DeezerError` · `GeoBlocked` · `WrongLicense`
 · `ExpiredTrackToken`
 </details>

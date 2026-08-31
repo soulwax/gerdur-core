@@ -1,5 +1,39 @@
 # Changelog
 
+## 2.14.0 - 2026-08-31
+
+Multi-tenant caching — for backends where many accounts share one process.
+
+### Added
+
+- **Shared gateway metadata cache.** Most gw payloads embed a per-account
+  `TRACK_TOKEN`, so each `Session` keeps its own cache. Five methods carry
+  nothing account-scoped — `album.getData`, `artist.getData`, `song.getLyrics`,
+  `album.getDiscography`, `playlist.getData` — and now go to a process-wide cache
+  **partitioned by country**, with a shared in-flight map so a concurrent burst
+  collapses into one request. Measured with 500 sessions reading the same album:
+  **500 gateway requests → 1**, and 1.8 MB of duplicated payload → one copy.
+  Track-bearing methods (`song.getData`, `playlist.getSongs`,
+  `song.getListByAlbum`, `song.getListData`, `episode.getData`, `mobile.*`,
+  `deezer.pageSearch`, `user_getInfo`, …) are never shared.
+- **`configureCache({shared: {maxSize, ttl}})`** — size the shared cache to your
+  catalogue. Default `{maxSize: 2000, ttl: 3_600_000}`.
+- **`cacheStats()`** → `{shared: {size, maxSize, hits, misses, inFlight}}` — for
+  a `/metrics` or health endpoint.
+- **`clearSharedCaches()`** — drops the shared cache; per-session caches are
+  untouched.
+- `__tests__/caches.ts` — offline tests pinning the isolation guarantees: no
+  cross-account token reuse, no cross-country bleed, in-flight entries released.
+- README: a **Running this on a server** section (stream don't buffer, decrypt is
+  on the event loop, size the cache, evict idle sessions).
+
+### Not done, deliberately
+
+- Memoising the initialised Blowfish key schedule per track was implemented,
+  measured and **reverted**: key setup is 39.7 µs against 33 ms to decrypt an
+  8 MiB file — **0.12%**, with break-even at ~10 KiB decrypted per key. Not worth
+  a cache or the public knob it would need.
+
 ## 2.13.3 - 2026-08-31
 
 ### Docs
