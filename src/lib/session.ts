@@ -1,8 +1,24 @@
 import delay from 'delay';
 import {DeezerError} from './errors';
 import type {DeezerErrorPayload} from './errors';
+import FastLRU from './fast-lru';
 import {HttpClient} from './http';
 import type {HttpQuery, HttpResponse} from './http';
+import type {
+  albumTracksType,
+  albumType,
+  artistInfoType,
+  discographyType,
+  lyricsType,
+  playlistInfo,
+  playlistTracksType,
+  profileType,
+  searchType,
+  trackType,
+  userType,
+} from '../types';
+
+type SearchEntity = 'ALBUM' | 'ARTIST' | 'TRACK' | 'PLAYLIST' | 'RADIO' | 'SHOW' | 'USER' | 'LIVESTREAM' | 'CHANNEL';
 
 /**
  * The bundled default `arl`. It is shared, rate-limited and expiring — good for
@@ -75,6 +91,14 @@ export class Session {
   /** the underlying HTTP client — its `defaults.params` carry `sid` / `api_token` */
   readonly http: HttpClient;
 
+  /**
+   * This session's response cache (1000 entries / 60 min). Per-session because
+   * gateway responses carry account-specific data (e.g. `TRACK_TOKEN`). Cleared
+   * when the account changes via `init(arl)`.
+   */
+  readonly cache = new FastLRU({maxSize: 1000, ttl: 60 * 60_000});
+  private readonly inFlight = new Map<string, Promise<any>>();
+
   private userData: SessionUserData | null = null;
   private userDataAt = 0;
 
@@ -144,6 +168,7 @@ export class Session {
       }
       this.arl = arl;
       this.userData = null;
+      this.cache.clear();
     }
     const {data} = await this.http.get<any>('https://www.deezer.com/ajax/gw-light.php', {
       params: {method: 'deezer.ping', api_version: '1.0', api_token: ''},
@@ -252,6 +277,152 @@ export class Session {
 
       throw new DeezerError(error);
     }
+  }
+
+  // ─── Cached request primitives ──────────────────────────────────────────────
+
+  /** Single-flight + LRU around a fetcher, keyed per session. */
+  private coalesce<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+    const cached = this.cache.get(key);
+    if (cached) {
+      return Promise.resolve(cached);
+    }
+    const pending = this.inFlight.get(key);
+    if (pending) {
+      return pending;
+    }
+    const promise = (async () => {
+      try {
+        return await fetcher();
+      } finally {
+        this.inFlight.delete(key);
+      }
+    })();
+    this.inFlight.set(key, promise);
+    return promise;
+  }
+
+  /** POST `gateway.php` — the main gw method channel. Coalesced + cached. */
+  gw<T = any>(body: Record<string, unknown>, method: string): Promise<T> {
+    const key = `gw:${method}:${Object.entries(body).join(':')}`;
+    return this.coalesce(key, async () => {
+      const {
+        data: {error, results},
+      } = await this.request<any>('POST', '/gateway.php', body, {params: {method}} as SessionRequestConfig);
+      if (results && Object.keys(results).length > 0) {
+        this.cache.set(key, results);
+        return results;
+      }
+      throw new DeezerError(error);
+    });
+  }
+
+  /** POST `gw-light.php` — the lighter method channel (search, suggest, …). */
+  gwLight<T = any>(body: Record<string, unknown>, method: string): Promise<T> {
+    const key = `gwl:${method}:${Object.entries(body).join(':')}`;
+    return this.coalesce(key, async () => {
+      const {
+        data: {error, results},
+      } = await this.request<any>('POST', 'https://www.deezer.com/ajax/gw-light.php', body, {
+        params: {method, api_version: '1.0'},
+      } as SessionRequestConfig);
+      if (results && Object.keys(results).length > 0) {
+        this.cache.set(key, results);
+        return results;
+      }
+      throw new DeezerError(error);
+    });
+  }
+
+  /** GET `gateway.php` — used for `app_page_get` and the like. */
+  gwGet<T = any>(method: string, params: Record<string, any> = {}, key = 'get_request'): Promise<T> {
+    const cacheKey = `gwget:${method}:${key}`;
+    return this.coalesce(cacheKey, async () => {
+      const {
+        data: {error, results},
+      } = await this.request<any>('GET', '/gateway.php', undefined, {
+        params: {method, ...params},
+      } as SessionRequestConfig);
+      if (results && Object.keys(results).length > 0) {
+        this.cache.set(cacheKey, results);
+        return results;
+      }
+      throw new DeezerError(error);
+    });
+  }
+
+  // ─── Query methods (this account's view) ────────────────────────────────────
+
+  /** The logged-in user's profile. */
+  getUser(): Promise<userType> {
+    return this.gwGet<userType>('user_getInfo');
+  }
+
+  /** `song.getData` for a track — includes this session's `TRACK_TOKEN`. */
+  getTrackInfo(sngId: string): Promise<trackType> {
+    return this.gw<trackType>({sng_id: sngId}, 'song.getData');
+  }
+
+  /** `song.getLyrics` — plain + time-synced lyrics. */
+  getLyrics(sngId: string): Promise<lyricsType> {
+    return this.gw<lyricsType>({sng_id: sngId}, 'song.getLyrics');
+  }
+
+  /** `album.getData`. */
+  getAlbumInfo(albId: string): Promise<albumType> {
+    return this.gw<albumType>({alb_id: albId}, 'album.getData');
+  }
+
+  /** All of an album's tracks (`song.getListByAlbum`). */
+  getAlbumTracks(albId: string): Promise<albumTracksType> {
+    return this.gw<albumTracksType>({alb_id: albId, lang: 'us', nb: -1}, 'song.getListByAlbum');
+  }
+
+  /** `playlist.getData`. */
+  getPlaylistInfo(playlistId: string): Promise<playlistInfo> {
+    return this.gw<playlistInfo>({playlist_id: playlistId, lang: 'en'}, 'playlist.getData');
+  }
+
+  /** All of a playlist's tracks, with `TRACK_POSITION` filled in. */
+  async getPlaylistTracks(playlistId: string): Promise<playlistTracksType> {
+    const res = await this.gw<playlistTracksType>(
+      {playlist_id: playlistId, lang: 'en', nb: -1, start: 0, tab: 0, tags: true, header: true},
+      'playlist.getSongs',
+    );
+    res.data = res.data.map((t, i) => {
+      t.TRACK_POSITION = i + 1;
+      return t;
+    });
+    return res;
+  }
+
+  /** `artist.getData`. */
+  getArtistInfo(artId: string): Promise<artistInfoType> {
+    return this.gw<artistInfoType>(
+      {art_id: artId, filter_role_id: [0], lang: 'en', tab: 0, nb: -1, start: 0},
+      'artist.getData',
+    );
+  }
+
+  /** An artist's discography (`album.getDiscography`). */
+  getDiscography(artId: string, nb = 500): Promise<discographyType> {
+    return this.gw<discographyType>(
+      {art_id: artId, filter_role_id: [0], lang: 'en', nb, nb_songs: -1, start: 0},
+      'album.getDiscography',
+    );
+  }
+
+  /** A public profile (`mobile.pageUser`). */
+  getProfile(userId: string): Promise<profileType> {
+    return this.gw<profileType>({user_id: userId, tab: 'loved', nb: -1}, 'mobile.pageUser');
+  }
+
+  /** Search (`deezer.pageSearch`). `types` defaults to `['TRACK']`. */
+  searchMusic(query: string, types: SearchEntity[] = ['TRACK'], nb = 15): Promise<searchType> {
+    return this.gwLight<searchType>(
+      {query, start: 0, nb, suggest: true, artist_suggest: true, top_tracks: true, types},
+      'deezer.pageSearch',
+    );
   }
 }
 

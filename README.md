@@ -114,13 +114,30 @@ module-level globals; bundling it means multiple accounts can coexist.
   media-API 403.
 - **`defaultSession()`** — the `Session` the free functions use.
 
+Each `Session` has **its own response cache** (per-account, since gateway
+responses carry account-specific `TRACK_TOKEN`s) and its own query methods:
+
+| Method | |
+| :--- | :--- |
+| `getUser()` | this account's profile |
+| `getTrackInfo(id)` | `song.getData` — the `TRACK_TOKEN` is this session's |
+| `getLyrics(id)` | plain + synced lyrics |
+| `getAlbumInfo(id)` / `getAlbumTracks(id)` | album metadata / full track list |
+| `getPlaylistInfo(id)` / `getPlaylistTracks(id)` | playlist metadata / tracks (with `TRACK_POSITION`) |
+| `getArtistInfo(id)` / `getDiscography(id, nb?)` | artist metadata / discography |
+| `getProfile(userId)` | a public profile |
+| `searchMusic(query, types?, nb?)` | search (`deezer.pageSearch`) |
+| `gw(body, method)` / `gwLight(body, method)` / `gwGet(method, params?)` | the raw coalesced request channels |
+| `init(arl?)` / `refreshApiToken()` / `loadUserData(force?)` / `invalidateUserData()` | lifecycle |
+
 ```js
 await initDeezerApi(arl);                 // default session, as before
 const track = await getTrackInfo('3135556');
 
-const s = await createSession(otherArl);  // a second account, isolated
+const s = await createSession(otherArl);  // a second account, fully isolated
 await s.loadUserData();
 console.log(s.country, s.canStreamLossless);
+const mine = await s.getTrackInfo('3135556');   // runs against `otherArl`
 ```
 
 ### `.initDeezerApi(arl_cookie);`
