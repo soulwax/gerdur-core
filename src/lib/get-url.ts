@@ -3,14 +3,8 @@ import {getSongFileName} from '../lib/decrypt';
 import {DeezerError} from '../lib/errors';
 import {headRequest, HttpStatusError} from '../lib/http';
 import instance from '../lib/request';
+import {defaultSession} from '../lib/session';
 import type {trackType} from '../types';
-
-interface userData {
-  license_token: string;
-  can_stream_lossless: boolean;
-  can_stream_hq: boolean;
-  country: string;
-}
 
 export class WrongLicense extends Error {
   constructor(format: string) {
@@ -38,8 +32,6 @@ export class ExpiredTrackToken extends Error {
     this.name = 'ExpiredTrackToken';
   }
 }
-
-let user_data: userData | null = null;
 
 /**
  * Every audio format Deezer's `get_url` understands, best → worst. `FLAC`,
@@ -94,23 +86,6 @@ const getTrackFileSize = (track: trackType, quality: Quality): number => {
   return key ? Number((track as any)[key]) || 0 : 0;
 };
 
-const dzAuthenticate = async (): Promise<userData> => {
-  const {data} = await instance.get<any>('https://www.deezer.com/ajax/gw-light.php', {
-    params: {
-      method: 'deezer.getUserData',
-      api_version: '1.0',
-      api_token: 'null',
-    },
-  });
-  user_data = {
-    license_token: data.results.USER.OPTIONS.license_token,
-    can_stream_lossless: data.results.USER.OPTIONS.web_lossless || data.results.USER.OPTIONS.mobile_loseless,
-    can_stream_hq: data.results.USER.OPTIONS.web_hq || data.results.USER.OPTIONS.mobile_hq,
-    country: data.results.COUNTRY,
-  };
-  return user_data;
-};
-
 const MEDIA_MAX_RETRIES = 3;
 
 /**
@@ -126,10 +101,10 @@ const mediaGetUrl = async (
   formats: {format: string; cipher: 'BF_CBC_STRIPE' | 'NONE'}[],
   attempt = 0,
 ): Promise<{data: any[]; country: string}> => {
-  const user = user_data ? user_data : await dzAuthenticate();
+  const user = await defaultSession().loadUserData();
   try {
     const {data} = await instance.post<any>('https://media.deezer.com/v1/get_url', {
-      license_token: user.license_token,
+      license_token: user.licenseToken,
       media: [{type: 'FULL', formats}],
       track_tokens,
     });
@@ -137,7 +112,8 @@ const mediaGetUrl = async (
   } catch (err) {
     const status = err instanceof HttpStatusError ? err.statusCode : 0;
     if ((status === 403 || status === 429 || status >= 500) && attempt < MEDIA_MAX_RETRIES) {
-      user_data = null;
+      // a stale license token is a common cause — force a refresh before the retry
+      await defaultSession().loadUserData(true);
       await delay(500 * 2 ** attempt + Math.floor(Math.random() * 250));
       return mediaGetUrl(track_tokens, formats, attempt + 1);
     }
@@ -170,8 +146,8 @@ const getTrackUrlFromServer = async (
   track_token: string,
   format: string,
 ): Promise<{url: string; format: string; cipher: string} | null> => {
-  const user = user_data ? user_data : await dzAuthenticate();
-  if ((format === 'FLAC' && !user.can_stream_lossless) || (format === 'MP3_320' && !user.can_stream_hq)) {
+  const user = await defaultSession().loadUserData();
+  if ((format === 'FLAC' && !user.canStreamLossless) || (format === 'MP3_320' && !user.canStreamHq)) {
     throw new WrongLicense(format);
   }
   const {data, country} = await mediaGetUrl([track_token], [{format, cipher: 'BF_CBC_STRIPE'}]);
