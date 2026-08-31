@@ -4,6 +4,8 @@ export {initDeezerApi, createSession, defaultSession, Session, RETRY_POLICY, DEF
 export type {SessionUserData} from './lib/session';
 export {DeezerError} from './lib/errors';
 export type {DeezerErrorPayload} from './lib/errors';
+export {configureCache, cacheStats, clearSharedCaches} from './lib/caches';
+export type {CacheOptions, CacheStats} from './lib/caches';
 export * from './api';
 export * from './converter';
 export * from './lib/decrypt';
