@@ -1,6 +1,6 @@
 {
   "name": "gerdur-core",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "description": "Core module for gerdur.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -61,7 +61,7 @@
       "!__tests__/helpers.ts"
     ],
     "require": [
-      "ts-node/register"
+      "ts-node/register/transpile-only"
     ],
     "timeout": "2m",
     "verbose": true

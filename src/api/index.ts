@@ -3,3 +3,4 @@ export * from './request';
 export * from './search';
 export * from './browse';
 export * from './preview';
+export * from './user';

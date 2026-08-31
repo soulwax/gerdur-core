@@ -1,6 +1,6 @@
 import test from 'ava';
 import * as api from '../src';
-import {ensureDeezerUserAuth, shouldSkipBecauseUnavailable, skipWithReason} from './helpers';
+import {ensureDeezerUserAuth, shouldSkipBecauseUnavailable, skipIfRateLimited, skipWithReason} from './helpers';
 import {decryptDownload} from '../src/lib/decrypt';
 import {getBuffer} from '../src/lib/http';
 import {downloadAlbumCover} from '../src/metadata-writer/abumCover';
@@ -35,23 +35,29 @@ test('GET TRACK INFO', async (t) => {
 });
 
 test('GET TRACK INFO - PUBLIC API', async (t) => {
-  const response = await api.getTrackInfoPublicApi(SNG_ID);
-
-  t.is(response.id, Number(SNG_ID));
-  t.is(response.isrc, 'GBDUW0000059');
-  t.is(response.type, 'track');
+  try {
+    const response = await api.getTrackInfoPublicApi(SNG_ID);
+    t.is(response.id, Number(SNG_ID));
+    t.is(response.isrc, 'GBDUW0000059');
+    t.is(response.type, 'track');
+  } catch (err) {
+    if (!skipIfRateLimited(t, err)) throw err;
+  }
 });
 
 test('CONCURRENT IDENTICAL REQUESTS ARE COALESCED', async (t) => {
   // 10 simultaneous callers for one id must share a single in-flight request:
   // the LRU is empty when they start, so without single-flight each hits the wire.
-  const responses = await Promise.all(Array.from({length: 10}, () => api.getAlbumInfoPublicApi('302127')));
-
-  t.is(responses.length, 10);
-  for (const r of responses) {
-    t.is(r, responses[0], 'every concurrent caller resolves to the same object');
+  try {
+    const responses = await Promise.all(Array.from({length: 10}, () => api.getAlbumInfoPublicApi('302127')));
+    t.is(responses.length, 10);
+    for (const r of responses) {
+      t.is(r, responses[0], 'every concurrent caller resolves to the same object');
+    }
+    t.is(Number(responses[0].id), 302127);
+  } catch (err) {
+    if (!skipIfRateLimited(t, err)) throw err;
   }
-  t.is(Number(responses[0].id), 302127);
 });
 
 test('GET TRACK COVER', async (t) => {
@@ -91,11 +97,14 @@ test('GET ALBUM INFO', async (t) => {
 });
 
 test('GET ALBUM INFO - PUBLIC API', async (t) => {
-  const response = await api.getAlbumInfoPublicApi(ALB_ID);
-
-  t.is(response.id, Number(ALB_ID));
-  t.is(response.upc, '724384960650');
-  t.is(response.type, 'album');
+  try {
+    const response = await api.getAlbumInfoPublicApi(ALB_ID);
+    t.is(response.id, Number(ALB_ID));
+    t.is(response.upc, '724384960650');
+    t.is(response.type, 'album');
+  } catch (err) {
+    if (!skipIfRateLimited(t, err)) throw err;
+  }
 });
 
 test('GET ALBUM TRACKS', async (t) => {
@@ -190,26 +199,32 @@ test('SEARCH PUBLIC API — TRACKS with advanced operators', async (t) => {
   const query = api.buildAdvancedQuery({query: 'one more time', artist: 'daft punk'});
   t.is(query, 'one more time artist:"daft punk"');
 
-  const response = await api.searchTracks(query, {limit: 2});
-
-  t.true(Array.isArray(response.data));
-  t.true(response.total > 0);
-  const first = response.data[0];
-  t.is(first.type, 'track');
-  t.true(typeof first.id === 'number');
-  t.truthy(first.preview);
-  t.regex(first.isrc ?? '', /^[A-Z]{2}/);
+  try {
+    const response = await api.searchTracks(query, {limit: 2});
+    t.true(Array.isArray(response.data));
+    t.true(response.total > 0);
+    const first = response.data[0];
+    t.is(first.type, 'track');
+    t.true(typeof first.id === 'number');
+    t.truthy(first.preview);
+    t.regex(first.isrc ?? '', /^[A-Z]{2}/);
+  } catch (err) {
+    if (!skipIfRateLimited(t, err)) throw err;
+  }
 });
 
 test('SEARCH PUBLIC API — ARTISTS & PAGING', async (t) => {
-  const response = await api.searchArtists('daft punk', {limit: 1});
+  try {
+    const response = await api.searchArtists('daft punk', {limit: 1});
+    t.is(response.data[0].type, 'artist');
+    t.is(response.data[0].name, 'Daft Punk');
+    t.true(response.data[0].nb_fan > 0);
 
-  t.is(response.data[0].type, 'artist');
-  t.is(response.data[0].name, 'Daft Punk');
-  t.true(response.data[0].nb_fan > 0);
-
-  const page2 = await api.searchTracks('love', {limit: 3, index: 3});
-  t.is(page2.data.length, 3);
+    const page2 = await api.searchTracks('love', {limit: 3, index: 3});
+    t.is(page2.data.length, 3);
+  } catch (err) {
+    if (!skipIfRateLimited(t, err)) throw err;
+  }
 });
 
 test('SUGGEST', async (t) => {
@@ -230,55 +245,105 @@ test('SUGGEST', async (t) => {
 });
 
 test('BROWSE — genres, chart, editorial', async (t) => {
-  const genres = await api.getGenres();
-  t.true(genres.data.length > 0);
-  t.is(genres.data[0].type, 'genre');
-  t.true(genres.data.some((g) => g.id === 0));
+  try {
+    const genres = await api.getGenres();
+    t.true(genres.data.length > 0);
+    t.is(genres.data[0].type, 'genre');
+    t.true(genres.data.some((g) => g.id === 0));
 
-  const chart = await api.getChart(0, 3);
-  t.true(chart.tracks.data.length > 0);
-  t.is(chart.tracks.data[0].position, 1);
-  t.is(chart.tracks.data[0].type, 'track');
-  t.true(Array.isArray(chart.artists.data));
+    const chart = await api.getChart(0, 3);
+    t.true(chart.tracks.data.length > 0);
+    t.is(chart.tracks.data[0].position, 1);
+    t.is(chart.tracks.data[0].type, 'track');
+    t.true(Array.isArray(chart.artists.data));
 
-  const chartTracks = await api.getChartTracks(0, 5);
-  t.is(chartTracks.data.length, 5);
+    const chartTracks = await api.getChartTracks(0, 5);
+    t.is(chartTracks.data.length, 5);
 
-  const editorial = await api.getEditorialList();
-  t.true(editorial.data.length > 0);
-  t.is(editorial.data[0].type, 'editorial');
+    const editorial = await api.getEditorialList();
+    t.true(editorial.data.length > 0);
+    t.is(editorial.data[0].type, 'editorial');
+  } catch (err) {
+    if (!skipIfRateLimited(t, err)) throw err;
+  }
 });
 
 test('BROWSE — artist discovery', async (t) => {
   const DAFT_PUNK = 27;
+  try {
+    const top = await api.getArtistTopTracks(DAFT_PUNK, 3);
+    t.is(top.data.length, 3);
+    t.is(top.data[0].type, 'track');
 
-  const top = await api.getArtistTopTracks(DAFT_PUNK, 3);
-  t.is(top.data.length, 3);
-  t.is(top.data[0].type, 'track');
+    const related = await api.getRelatedArtists(DAFT_PUNK, 3);
+    t.true(related.data.length > 0);
+    t.is(related.data[0].type, 'artist');
 
-  const related = await api.getRelatedArtists(DAFT_PUNK, 3);
-  t.true(related.data.length > 0);
-  t.is(related.data[0].type, 'artist');
+    const albums = await api.getArtistAlbums(DAFT_PUNK, 3);
+    t.true(albums.data.length > 0);
+    t.is(albums.data[0].type, 'album');
+    t.truthy(albums.data[0].release_date);
 
-  const albums = await api.getArtistAlbums(DAFT_PUNK, 3);
-  t.true(albums.data.length > 0);
-  t.is(albums.data[0].type, 'album');
-  t.truthy(albums.data[0].release_date);
-
-  const radio = await api.getArtistRadioTracks(DAFT_PUNK);
-  t.true(radio.data.length > 0);
+    const radio = await api.getArtistRadioTracks(DAFT_PUNK);
+    t.true(radio.data.length > 0);
+  } catch (err) {
+    if (!skipIfRateLimited(t, err)) throw err;
+  }
 });
 
 test('BROWSE — ISRC / UPC resolution', async (t) => {
-  const track = await api.getTrackByISRC('GBDUW0000059');
-  t.is(track.id, 3135556);
-  t.is(track.title, 'Harder, Better, Faster, Stronger');
-  t.is(track.type, 'track');
+  try {
+    const track = await api.getTrackByISRC('GBDUW0000059');
+    t.is(track.id, 3135556);
+    t.is(track.title, 'Harder, Better, Faster, Stronger');
+    t.is(track.type, 'track');
 
-  const album = await api.getAlbumByUPC('0724384960650');
-  t.is(album.id, 302127);
-  t.is(album.title, 'Discovery');
-  t.true((album.tracks?.data.length ?? 0) > 0);
+    const album = await api.getAlbumByUPC('0724384960650');
+    t.is(album.id, 302127);
+    t.is(album.title, 'Discovery');
+    t.true((album.tracks?.data.length ?? 0) > 0);
+  } catch (err) {
+    if (!skipIfRateLimited(t, err)) throw err;
+  }
+});
+
+test('USER — flow, favourites, playlists (public profile)', async (t) => {
+  const UID = '2064440442'; // the public profile the profile test already uses
+  try {
+    const flow = await api.getUserFlow(UID);
+    t.true(flow.data.length > 0);
+    t.is(flow.data[0].type, 'track');
+
+    const tracks = await api.getUserFavoriteTracks(UID, 3);
+    t.true(tracks.total > 0);
+    t.true(typeof tracks.data[0].time_add === 'number');
+
+    const artists = await api.getUserFavoriteArtists(UID, 3);
+    t.is(artists.data[0].type, 'artist');
+
+    const playlists = await api.getUserPlaylists(UID, 3);
+    t.is(playlists.data[0].type, 'playlist');
+  } catch (err) {
+    if (!skipIfRateLimited(t, err)) throw err;
+  }
+});
+
+test('USER — radios', async (t) => {
+  try {
+    const radios = await api.getRadios();
+    t.true(radios.data.length > 0);
+    t.is(radios.data[0].type, 'radio');
+
+    const radioTracks = await api.getRadioTracks(radios.data[0].id);
+    t.true(radioTracks.data.length > 0);
+    t.is(radioTracks.data[0].type, 'track');
+
+    const genres = await api.getRadioGenres();
+    t.true(genres.data.length > 0);
+    t.true(Array.isArray(genres.data[0].radios));
+  } catch (err) {
+    if (!skipIfRateLimited(t, err)) throw err;
+  }
 });
 
 test('BATCH RESOLVE DOWNLOAD URLS', async (t) => {
