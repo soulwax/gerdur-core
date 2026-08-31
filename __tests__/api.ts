@@ -561,6 +561,40 @@ test('GET SHOW LIST', async (t) => {
   t.true(Array.isArray(show.EPISODES.data));
 });
 
+test('PODCAST — episode + show episodes', async (t) => {
+  if (!(await ensureDeezerUserAuth(t))) {
+    return;
+  }
+
+  const episodes = await api.getShowEpisodes('1235862', 3);
+  t.is(episodes.data.length, 3);
+  t.true((episodes.total ?? 0) > 3);
+
+  const episode = await api.getEpisode(episodes.data[0].EPISODE_ID);
+  t.is(episode.EPISODE_ID, episodes.data[0].EPISODE_ID);
+  t.truthy(episode.EPISODE_DIRECT_STREAM_URL || episode.MD5_ORIGIN);
+  t.true(Number(episode.DURATION) > 0);
+});
+
+test('REFRESH TRACK TOKENS — batch', async (t) => {
+  if (!(await ensureDeezerUserAuth(t))) {
+    return;
+  }
+
+  const {data} = await api.getAlbumTracks('302127');
+  const tracks = data.slice(0, 3);
+  const forcedStale = tracks.map((tr) => ({...tr, TRACK_TOKEN_EXPIRE: 1}));
+
+  const refreshed = await api.refreshTrackTokens(forcedStale);
+  t.is(refreshed.length, forcedStale.length);
+  for (let i = 0; i < refreshed.length; i++) {
+    t.not(refreshed[i].TRACK_TOKEN, forcedStale[i].TRACK_TOKEN, 'token was replaced');
+    t.true(refreshed[i].TRACK_TOKEN_EXPIRE * 1000 > Date.now(), 'new token is in the future');
+  }
+  // a second pass is a no-op — nothing stale
+  t.is((await api.refreshTrackTokens(refreshed))[0], refreshed[0]);
+});
+
 test('GET CHANNEL LIST', async (t) => {
   const channel = await api.getChannelList();
   t.is(channel.count, channel.data.length);

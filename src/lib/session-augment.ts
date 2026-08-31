@@ -4,7 +4,7 @@
  * `import`ing this file for its side effect wires the methods onto the prototype;
  * `src/index.ts` does that.
  */
-import {getTrackDownloadUrl, resolveDownloadUrls} from './get-url';
+import {getTrackDownloadUrl, refreshTrackTokens, resolveDownloadUrls} from './get-url';
 import type {Quality, ResolvedUrl} from './get-url';
 import {Session} from './session';
 import {downloadTrackBuffer, streamTrackDownload} from './stream-download';
@@ -28,6 +28,8 @@ declare module './session' {
       quality: number,
       options?: Omit<StreamTrackOptions, 'session' | 'resumeFrom'>,
     ): Promise<Buffer | null>;
+    /** Batch-refresh the `TRACK_TOKEN`s on these tracks (as this account) before a long download. */
+    refreshTrackTokens(tracks: trackType[], graceSeconds?: number): Promise<trackType[]>;
   }
 }
 
@@ -45,4 +47,8 @@ Session.prototype.streamTrack = function (track, quality, options = {}) {
 
 Session.prototype.getTrackBuffer = function (track, quality, options = {}) {
   return downloadTrackBuffer(track, quality, {...options, session: this});
+};
+
+Session.prototype.refreshTrackTokens = function (tracks, graceSeconds) {
+  return refreshTrackTokens(tracks, {graceSeconds, session: this});
 };

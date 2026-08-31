@@ -321,6 +321,13 @@ const {data: loved} = await getUserFavoriteTracks(me.USER_ID);
 const {data: eighties} = await getRadioTracks(38305);     // "The '80s"
 ```
 
+### Podcasts
+
+| Method | |
+| :--- | :--- |
+| `getShowEpisodes(showId, nb = 25, start = 0)` | a page of a show's episodes, newest first |
+| `getEpisode(episodeId)` | one episode — `EPISODE_DIRECT_STREAM_URL` is a plain MP3, no licence / decryption |
+
 ### `.getTrackDownloadUrl(track, quality);`
 
 | Parameters | Required |        Type |                        Description |
@@ -330,6 +337,19 @@ const {data: eighties} = await getRadioTracks(38305);     // "The '80s"
 
 Resolves `{trackUrl, isEncrypted, fileSize}`. `isEncrypted` now comes from the
 media API's `cipher` field (authoritative) rather than a URL guess.
+
+### `.refreshTrackTokens(tracks, options?);`
+
+`TRACK_TOKEN`s live ~1 hour, so a token fetched at the start of a long playlist
+download is dead by track 40 (surfacing as an opaque CDN 403). Run the selection
+through this first — **one** `song.getListData` request refreshes every token
+that has expired (or expires within `options.graceSeconds`, default 300).
+Tracks with a still-valid token come back untouched. Also `session.refreshTrackTokens(tracks, graceSeconds?)`.
+
+```js
+const fresh = await refreshTrackTokens(playlist.tracks);
+const urls = await resolveDownloadUrls(fresh, [9, 3, 1]);
+```
 
 ### Formats
 
