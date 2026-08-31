@@ -523,6 +523,7 @@ model.contributors;  // normalised producers / engineers / performers / …
 | `album` / `lyrics` / `publicTrack` | — | pre-fetched payloads — pass once per album to skip refetching |
 | `embedCover` / `embedArtistImage` | `true` | |
 | `writeLyrics` / `embedSyncedLyrics` | `true` | synced LRC goes to FLAC Vorbis only (no ID3v2.3 `SYLT`) |
+| `lyricsFallback` | `true` | scrape Musixmatch when Deezer has no lyrics — 2 requests per such track, and they fail where Musixmatch blocks you |
 | `richCredits` | `true` | hydrate credits + BPM for album/playlist tracks that omit them |
 | `deezerIds` / `includeRank` | `true` | write `DEEZER_*_ID` / popularity rank |
 
@@ -657,6 +658,11 @@ cacheStats(); // {shared: {size, maxSize, hits, misses, inFlight}} — for /metr
   the process. Put the decrypt in a worker if you saturate a core.
 - **Size the shared cache** to your catalogue with `configureCache`, and export
   `cacheStats()` so you can see the hit rate.
+- **Tagging is where the quota goes**, not downloading. A 14-track album costs
+  ~54 requests to tag and 2 to fetch. `{richCredits: false, lyricsFallback: false}`
+  takes that to **7 — 81% fewer against Deezer's quota** — at the cost of full
+  credits, BPM and non-Deezer lyrics. Pre-feed `{album, lyrics, cover}` for
+  anything you already hold.
 - **Evict idle sessions yourself.** `createSession` has no lifecycle — a session
   per user, kept forever, keeps its cache forever.
 - `httpAgent` / `httpsAgent` are process-global (`maxSockets: 64`) and shared

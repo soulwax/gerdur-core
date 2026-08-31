@@ -1,5 +1,35 @@
 # Changelog
 
+## 2.16.0 - 2026-08-31
+
+### Added
+
+- **`AddTrackTagsOptions.lyricsFallback`** (default `true`). When Deezer has no
+  lyrics for a track, the tagger falls back to scraping Musixmatch — two requests
+  per track that needs it, and they fail outright wherever Musixmatch blocks you.
+  Measured on a 14-track album: **16 requests, all of them wasted** in that case.
+  Set it to `false` to keep only what Deezer serves.
+
+  Combined with `richCredits: false`, tagging that album drops from **54
+  requests to 7 — 87% fewer overall, and 81% fewer against Deezer's quota**
+  (36 -> 7), which is the constraint that actually binds. The trade is full
+  credits, BPM, and non-Deezer lyrics.
+
+### Not done, deliberately
+
+- A `worker_threads` pool for Blowfish decryption. Decrypting 4 MB batches
+  synchronously it measured 2.6x throughput and 4.5x lower p95 event-loop lag —
+  but that benchmark manufactured the problem. Through a real pipeline the
+  existing in-thread stream already shows **p95 loop lag of 0.0 ms** (it works a
+  socket read at a time, not a whole file), and the pooled version came out at
+  **0.72x** once three extra 4 MB copies per batch were paid. Decrypt only binds
+  above ~265 MB/s of aggregate download in one process. Rationale kept in
+  `decrypt.ts`.
+- Batch-hydrating credits via `song.getListData`. Probed live: it returns 44
+  fields but **not `SNG_CONTRIBUTORS`**, and neither does `song.getListByAlbum`.
+  Deezer exposes contributors only per-track, so those calls are irreducible —
+  `richCredits: false` above is the only lever.
+
 ## 2.15.0 - 2026-08-31
 
 Streaming tag write — tagging no longer holds the audio.

@@ -39,6 +39,12 @@ export interface AddTrackTagsOptions {
   embedArtistImage?: boolean;
   /** fetch + embed lyrics. default true */
   writeLyrics?: boolean;
+  /**
+   * When Deezer has no lyrics for a track, fall back to scraping Musixmatch.
+   * Two extra requests per track that needs it (16 on a typical album), and they
+   * fail wherever Musixmatch blocks you. default true.
+   */
+  lyricsFallback?: boolean;
   /** embed synced LRC (FLAC Vorbis comment only; MP3 has no v2.3 synced frame). default true */
   embedSyncedLyrics?: boolean;
   /**
@@ -58,6 +64,7 @@ const DEFAULTS: Required<Omit<AddTrackTagsOptions, 'cover' | 'artistImage' | 'al
   embedCover: true,
   embedArtistImage: true,
   writeLyrics: true,
+  lyricsFallback: true,
   embedSyncedLyrics: true,
   richCredits: true,
   deezerIds: true,
@@ -126,7 +133,7 @@ export const resolveTagModel = async (
     options.lyrics !== undefined
       ? Promise.resolve(options.lyrics)
       : opt.writeLyrics
-      ? getTrackLyrics(track).catch(() => null)
+      ? getTrackLyrics(track, opt.lyricsFallback).catch(() => null)
       : Promise.resolve(null),
     options.publicTrack !== undefined
       ? Promise.resolve(options.publicTrack)
