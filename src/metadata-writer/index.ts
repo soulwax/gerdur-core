@@ -17,6 +17,7 @@ export type {RichAlbum} from './rich-album';
 export {buildTagModel} from './model';
 export type {TrackTagModel, Person} from './model';
 export {downloadAlbumCover, downloadArtistImage, MAX_COVER_SIZE} from './abumCover';
+export {createTagStream, probeAudioOffset} from './tag-stream';
 
 export interface AddTrackTagsOptions {
   /** embedded cover size in px, 56–1800 (default 1000) */
@@ -94,22 +95,22 @@ const hydrate = async (track: trackType): Promise<trackType> => {
 };
 
 /**
- * Pull together everything Deezer has for a track and write it into the audio.
+ * Resolve everything Deezer has for a track into the canonical tag model —
+ * without touching any audio.
  *
- * Sniffs `fLaC` vs MP3 and dispatches to the FLAC / ID3 writer. Fetches album
- * info, lyrics, cover and (for album/playlist tracks) full credits + BPM in
- * parallel — every call is memoised and in-flight-coalesced, so tagging all
- * tracks of one album hits each metadata endpoint once. Pass any of
+ * Fetches album info, lyrics, cover, artist image and (for album/playlist
+ * tracks, which ship without them) full credits + BPM, all in parallel; every
+ * call is memoised and in-flight-coalesced, so resolving all tracks of one album
+ * hits each metadata endpoint once. Pass any of
  * `options.{album,lyrics,cover,publicTrack}` to skip the corresponding fetch.
  *
- * @returns `{buffer, model}` — `model` carries the structured metadata and,
- *   when available, `model.lyricsSynced` (an LRC document for a sidecar file).
+ * Feed the result to `createTagStream(model)` to tag a stream, or use
+ * {@link addTrackTags} to tag a `Buffer` in one call.
  */
-export const addTrackTags = async (
-  trackBuffer: Buffer,
+export const resolveTagModel = async (
   trackInput: trackType,
   options: AddTrackTagsOptions = {},
-): Promise<TaggedTrack> => {
+): Promise<TrackTagModel> => {
   const opt = {...DEFAULTS, ...options};
 
   const track = opt.richCredits ? await hydrate(trackInput) : trackInput;
@@ -153,6 +154,33 @@ export const addTrackTags = async (
     deezerIds: opt.deezerIds,
     includeRank: opt.includeRank,
   });
+
+  return model;
+};
+
+/**
+ * Pull together everything Deezer has for a track and write it into the audio.
+ *
+ * Sniffs `fLaC` vs MP3 and dispatches to the FLAC / ID3 writer. Fetches album
+ * info, lyrics, cover and (for album/playlist tracks) full credits + BPM in
+ * parallel — every call is memoised and in-flight-coalesced, so tagging all
+ * tracks of one album hits each metadata endpoint once. Pass any of
+ * `options.{album,lyrics,cover,publicTrack}` to skip the corresponding fetch.
+ *
+ * This holds the whole file in memory (and the tag writers allocate another
+ * copy). On a server, prefer {@link resolveTagModel} + `createTagStream`, which
+ * produces byte-identical output without buffering the audio.
+ *
+ * @returns `{buffer, model}` — `model` carries the structured metadata and,
+ *   when available, `model.lyricsSynced` (an LRC document for a sidecar file).
+ */
+export const addTrackTags = async (
+  trackBuffer: Buffer,
+  trackInput: trackType,
+  options: AddTrackTagsOptions = {},
+): Promise<TaggedTrack> => {
+  const model = await resolveTagModel(trackInput, options);
+  const opt = {...DEFAULTS, ...options};
 
   const isFlac = trackBuffer.slice(0, 4).toString('ascii') === 'fLaC';
   const buffer = isFlac

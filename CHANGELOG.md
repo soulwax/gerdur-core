@@ -1,5 +1,43 @@
 # Changelog
 
+## 2.15.0 - 2026-08-31
+
+Streaming tag write — tagging no longer holds the audio.
+
+### Added
+
+- **`createTagStream(model, options?)`** — a `Transform` that rewrites a track's
+  tags as bytes flow through it. `addTrackTags` has to materialise the whole
+  file (`browser-id3-writer` allocates `audio.length + tag` and copies the audio
+  in, plus another copy to strip an existing ID3v2; the FLAC path concatenates
+  the same way), which is what caps concurrency on a server and what cancelled
+  `streamTrackDownload`'s constant-memory guarantee at the last step.
+
+  Both containers keep their metadata at the front, so none of that copying is
+  needed: MP3 emits a fresh ID3v2 and discards exactly the old tag's bytes as
+  they pass; FLAC buffers only the metadata block chain and passes the frames
+  through untouched. Peak memory is O(metadata), not O(file).
+
+  Measured, 40 MB tracks: **4 concurrent 239 MB -> 0 MB; 16 concurrent 965 MB ->
+  0 MB, and 6.5x faster** (986 ms -> 150 ms) from skipping the copies. Output is
+  byte-identical to `addTrackTags` — the tag bytes come from the same writers,
+  called with an empty / truncated source so they emit only the header.
+- **`resolveTagModel(track, options?)`** — the metadata resolution half of
+  `addTrackTags` (album, lyrics, cover, artist image, credits, BPM) without
+  touching audio, so a streaming caller can get a model to hand to
+  `createTagStream`. Same options, same coalescing. `addTrackTags` is now a thin
+  wrapper over it — no behaviour change.
+- **`probeAudioOffset(buffer)`** — where the audio starts in a source and which
+  container it is; exported for callers doing their own muxing.
+- `__tests__/tag-stream.ts` — byte-identical output asserted across chunk sizes
+  from 1 byte to whole-file, for MP3 and FLAC, with and without a pre-existing
+  tag.
+
+### Changed
+
+- README: streaming tag write documented under **Tag MP3 / FLAC** and in
+  **Running this on a server**.
+
 ## 2.14.0 - 2026-08-31
 
 Multi-tenant caching — for backends where many accounts share one process.
