@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.11.0 - 2026-08-31
+
+### Added
+
+- **`searchFacets(result)`** — flatten the per-type hit counts + Deezer's
+  relevance `order` out of a `searchMusic` result.
+
+### Internal
+
+- The live-API test suite skips more gracefully when an upstream (Deezer public
+  REST, Tidal, YouTube) rate-limits or consent-walls the runner — the
+  `--> DEEZER` converter tests and YouTube tests now degrade to a skip instead
+  of a hard fail.
+
 ## 2.10.0 - 2026-08-31
 
 Leftovers — batch token refresh + podcast episodes. Additive.

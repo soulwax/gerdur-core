@@ -176,6 +176,10 @@ test('SEARCH TRACK, ALBUM & ARTIST', async (t) => {
   t.truthy(response.TRACK.count > 0);
   t.truthy(response.ALBUM.count > 0);
   t.truthy(response.ARTIST.count > 0);
+
+  const facets = api.searchFacets(response);
+  t.true(facets.track > 0 && facets.album > 0 && facets.artist > 0);
+  t.true(Array.isArray(facets.order) && facets.order.includes('TRACK'));
 });
 
 test('BUILD ADVANCED QUERY', (t) => {

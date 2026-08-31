@@ -261,6 +261,16 @@ ignore the operators, so pass a plain string there.
 "as you type" UIs. `nb` (default 5) caps items per type. Needs an initialised
 session (`initDeezerApi`).
 
+### `.searchFacets(result)`
+
+Flattens the per-type hit counts + Deezer's relevance `order` out of a
+`searchMusic` result — for "207 tracks · 99 albums · 17 artists" UIs.
+
+```js
+const r = await searchMusic('daft punk', ['TRACK', 'ALBUM', 'ARTIST']);
+searchFacets(r); // {track: 207, album: 99, artist: 17, …, order: ['TOP_RESULT','TRACK',…]}
+```
+
 ### Browse & discovery
 
 Public REST endpoints — no `arl` needed, memoised like the rest. All return a

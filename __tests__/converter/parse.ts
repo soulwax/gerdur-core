@@ -162,7 +162,16 @@ test('PARSE TIDAL ARTIST', async (t) => {
 if (!process.env.CI) {
   test('PARSE YOUTUBE TRACK', async (t) => {
     const url = 'https://www.youtube.com/watch?v=4NRXx6U8ABQ';
-    const response = await parseInfo(url);
+    let response;
+    try {
+      response = await parseInfo(url);
+    } catch (err) {
+      if (shouldSkipBecauseUnavailable(err, [429, 403], ['consent', 'Too Many Requests'])) {
+        skipWithReason(t, 'Skipping YouTube parse: YouTube is rate-limiting / consent-walling this IP.');
+        return;
+      }
+      throw err;
+    }
 
     t.deepEqual(response.info, {id: '4NRXx6U8ABQ', type: 'youtube-track'});
     t.deepEqual(response.linkinfo, {});
