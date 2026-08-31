@@ -76,7 +76,10 @@ test('GET TRACK LYRICS', async (t) => {
   }
 
   t.is(response.LYRICS_ID, '2780622');
-  t.is(response.LYRICS_TEXT.length, 1719);
+  // Deezer edits the transcript over time (was 1719, later 1774) — assert it
+  // came back substantial rather than pinning an exact length.
+  t.true(response.LYRICS_TEXT.length > 1500);
+  t.regex(response.LYRICS_TEXT, /Harder|Faster|Stronger/);
 });
 
 test('GET ALBUM INFO', async (t) => {
@@ -164,6 +167,66 @@ test('SEARCH TRACK, ALBUM & ARTIST', async (t) => {
   t.truthy(response.TRACK.count > 0);
   t.truthy(response.ALBUM.count > 0);
   t.truthy(response.ARTIST.count > 0);
+});
+
+test('BUILD ADVANCED QUERY', (t) => {
+  t.is(
+    api.buildAdvancedQuery({artist: 'daft punk', durMin: 200, durMax: 400}),
+    'artist:"daft punk" dur_min:200 dur_max:400',
+  );
+  t.is(
+    api.buildAdvancedQuery({query: 'one more', track: 'a "b" c', bpmMin: 120}),
+    'one more track:"a b c" bpm_min:120',
+  );
+  t.is(api.buildAdvancedQuery({album: 'discovery', label: 'Virgin'}), 'album:"discovery" label:"Virgin"');
+  // negative / non-finite ranges and empty strings are dropped
+  t.is(api.buildAdvancedQuery({durMin: -5, bpmMax: NaN, artist: '   '}), '');
+  t.is(api.buildAdvancedQuery({}), '');
+});
+
+test('SEARCH PUBLIC API — TRACKS with advanced operators', async (t) => {
+  // Deezer applies the operators loosely, but free text + `artist:` reliably
+  // returns hits and exercises the builder → request path.
+  const query = api.buildAdvancedQuery({query: 'one more time', artist: 'daft punk'});
+  t.is(query, 'one more time artist:"daft punk"');
+
+  const response = await api.searchTracks(query, {limit: 2});
+
+  t.true(Array.isArray(response.data));
+  t.true(response.total > 0);
+  const first = response.data[0];
+  t.is(first.type, 'track');
+  t.true(typeof first.id === 'number');
+  t.truthy(first.preview);
+  t.regex(first.isrc ?? '', /^[A-Z]{2}/);
+});
+
+test('SEARCH PUBLIC API — ARTISTS & PAGING', async (t) => {
+  const response = await api.searchArtists('daft punk', {limit: 1});
+
+  t.is(response.data[0].type, 'artist');
+  t.is(response.data[0].name, 'Daft Punk');
+  t.true(response.data[0].nb_fan > 0);
+
+  const page2 = await api.searchTracks('love', {limit: 3, index: 3});
+  t.is(page2.data.length, 3);
+});
+
+test('SUGGEST', async (t) => {
+  let response;
+  try {
+    response = await api.suggest('daft punk', 3);
+  } catch (err) {
+    if (shouldSkipBecauseUnavailable(err, [], ['NEED_API_AUTH_REQUIRED', 'VALID_TOKEN_REQUIRED'])) {
+      skipWithReason(t, 'Skipping suggest test: the bundled session is rate-limited.');
+      return;
+    }
+    throw err;
+  }
+
+  t.is(response.QUERY, 'daft punk');
+  t.true(Array.isArray(response.ORDER));
+  t.true((response.ARTIST ?? []).some((a) => a.ART_NAME === 'Daft Punk'));
 });
 
 test('BATCH RESOLVE DOWNLOAD URLS', async (t) => {
@@ -326,7 +389,10 @@ test('GET PLAYLIST CHANNEL', async (t) => {
   }
 
   const channel = await api.getPlaylistChannel('channels/dance');
-  t.deepEqual(Object.keys(channel), ['version', 'page_id', 'ga', 'title', 'persistent', 'sections', 'expire']);
+  // Deezer trims/reorders the envelope keys over time — assert the stable ones.
+  for (const key of ['version', 'page_id', 'title', 'sections']) {
+    t.true(key in channel, `channel is missing "${key}"`);
+  }
   t.truthy(channel.title);
   t.true(Array.isArray(channel.sections));
 });

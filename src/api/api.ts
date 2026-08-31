@@ -214,5 +214,8 @@ export const getPlaylistChannel = async (page: string): Promise<playlistChannelT
     timezone_offset: '6',
   };
 
-  return await requestGet('app_page_get', {gateway_input}, page);
+  // `gateway_input` is a nested object; it must reach the gateway as a JSON
+  // string, otherwise it serialises to `[object Object]` and Deezer reports the
+  // inner `page` as missing (`MISSING_PARAMETER_PAGE`).
+  return await requestGet('app_page_get', {gateway_input: JSON.stringify(gateway_input)}, page);
 };

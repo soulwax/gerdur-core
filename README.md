@@ -162,6 +162,40 @@ All method returns `Object` or throws `Error`. Make sure to catch error on your 
 | `types`    |    No    |  `array` | ['TRACK'] |           array of search types |
 | `limit`    |    No    | `number` |        15 | maximum item to fetch per types |
 
+### `.searchPublicApi(query, options?)` — and `.searchTracks` / `.searchAlbums` / `.searchArtists` / `.searchPlaylists`
+
+Hits the **public** REST API (`api.deezer.com/search`) instead of the internal
+`pageSearch` gateway. Returns clean public-API objects (`isrc`, `preview`,
+`rank`, numeric ids), accepts the advanced query operators, an `order`, and
+`limit` / `index` paging. No auth required.
+
+| Parameters       | Required | Type      | Description                                                                   |
+| ---------------- | :------: | --------- | --------------------------------------------------------------------------- |
+| `query`          | Yes      | `string`  | plain text, or the output of `buildAdvancedQuery`                            |
+| `options.type`   | No       | `string`  | `'track'` (default), `'album'`, `'artist'`, `'playlist'`, `'user'`, `'radio'` |
+| `options.order`  | No       | `string`  | `RANKING`, `TRACK_ASC`, `RATING_DESC`, `DURATION_DESC`, …                    |
+| `options.strict` | No       | `boolean` | send Deezer's `strict=on` (disables the fuzzy fallback)                     |
+| `options.limit`  | No       | `number`  | page size (Deezer caps near 100)                                            |
+| `options.index`  | No       | `number`  | offset into the result set                                                  |
+
+```js
+const {data} = await searchTracks(buildAdvancedQuery({artist: 'daft punk', durMin: 200}), {limit: 25});
+```
+
+### `.buildAdvancedQuery(filters)`
+
+Pure helper — composes Deezer's advanced operators into one query string.
+`{artist, album, track, label}` become `artist:"…"`; `{durMin, durMax, bpmMin, bpmMax}`
+become `dur_min:NNN` / `bpm_min:NNN`; a free-text `query` is emitted first.
+Reliable only on the **track** index — `/search/album` and `/search/artist`
+ignore the operators, so pass a plain string there.
+
+### `.suggest(query, nb?)`
+
+`deezer.suggest` autocomplete — cheaper and faster than `searchMusic`, for
+"as you type" UIs. `nb` (default 5) caps items per type. Needs an initialised
+session (`initDeezerApi`).
+
 ### `.getTrackDownloadUrl(track, quality);`
 
 | Parameters | Required |        Type |                        Description |

@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.1.0 - 2026-08-31
+
+Phase 2.5 — search, properly. All additive.
+
+### Added
+
+- **`searchPublicApi(query, options?)`** — search the public REST API
+  (`api.deezer.com/search`) rather than the internal `pageSearch` gateway.
+  Returns clean public-API objects (`isrc`, `preview`, `rank`, numeric ids) and
+  takes `type` (`track` | `album` | `artist` | `playlist` | `user` | `radio` |
+  `podcast`), `order`, `strict`, and `limit` / `index` paging. No auth required.
+- **`searchTracks` / `searchAlbums` / `searchArtists` / `searchPlaylists`** —
+  thin typed wrappers over `searchPublicApi` with the entity fixed.
+- **`buildAdvancedQuery(filters)`** — pure helper that composes Deezer's advanced
+  operators into one query string: `{artist, album, track, label}` →
+  `artist:"…"`, `{durMin, durMax, bpmMin, bpmMax}` → `dur_min:NNN` / `bpm_min:NNN`,
+  free-text `query` first. Reliable on the track index only (Deezer's
+  `/search/album` and `/search/artist` ignore the operators).
+- **`suggest(query, nb?)`** — the `deezer.suggest` autocomplete endpoint, for
+  "as you type" UIs; cheaper than a full `searchMusic`.
+- New exported types: `advancedSearchFilters`, `searchOrder`, `searchEntity`,
+  `publicApiSearchOptions`, `publicApiSearchResponse<T>`, `searchResultTrack`,
+  `searchResultAlbum`, `searchResultArtist`, `searchResultPlaylist`,
+  `suggestResult`.
+
+### Fixed
+
+- **`getPlaylistChannel`** returned `MISSING_PARAMETER_PAGE` — the nested
+  `gateway_input` was serialised as `[object Object]`. It is now JSON-stringified
+  before the request, so channel pages resolve again.
+
 ## 2.0.0 - 2026-08-31
 
 Metadata overhaul — extract everything Deezer actually exposes for a track.
