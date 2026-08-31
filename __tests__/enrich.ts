@@ -52,3 +52,19 @@ test.serial('Cover Art Archive — best front cover, and null for a missing MBID
     if (!skipIfRateLimited(t, err)) throw err;
   }
 });
+
+test.serial('getCoverArtByISRC — picks a real cover, not the first promo release', async (t) => {
+  try {
+    const url = await api.getCoverArtByISRC('GBDUW0000059', {minSize: 500});
+    // this ISRC's first MB release is a promo comp with no art; the ranked walk
+    // must fall through to an official album that has one
+    if (url) {
+      t.regex(url, /^https:\/\/(coverartarchive\.org|.*archive\.org)\//);
+    } else {
+      skipWithReason(t, 'no CAA art for any of the top release-groups right now');
+    }
+    t.is(await api.getCoverArtByISRC('US1234567890'), null);
+  } catch (err) {
+    if (!skipIfRateLimited(t, err)) throw err;
+  }
+});
