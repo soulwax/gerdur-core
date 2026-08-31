@@ -1,6 +1,6 @@
 import test from 'ava';
 import * as api from '../src';
-import {ensureDeezerUserAuth, skipIfRateLimited} from './helpers';
+import {ensureDeezerUserAuth, skipIfRateLimited, skipWithReason} from './helpers';
 
 test('createSession — isolated, inspectable state', async (t) => {
   if (!(await ensureDeezerUserAuth(t))) {
@@ -81,4 +81,40 @@ test('each session has its own cache', async (t) => {
   t.not(a.cache, b.cache);
   a.cache.set('k', 1);
   t.is(b.cache.get('k'), undefined);
+});
+
+test('Session download methods', async (t) => {
+  if (!(await ensureDeezerUserAuth(t))) {
+    return;
+  }
+  try {
+    const session = await api.createSession(process.env.HIFI_ARL);
+    const track = await session.getTrackInfo('3135556');
+
+    const url = await session.getTrackDownloadUrl(track, 1);
+    if (!url) {
+      skipWithReason(t, 'media API unavailable for this account right now');
+      return;
+    }
+    t.true(/^https?:\/\//.test(url.trackUrl));
+    t.true(url.fileSize > 0);
+
+    const resolved = await session.resolveDownloadUrls([track], [1]);
+    t.is(resolved.length, 1);
+
+    if (process.env.CI) {
+      const buf = await session.getTrackBuffer(track, 1);
+      t.true(Buffer.isBuffer(buf) && (buf?.length ?? 0) > 100_000);
+    }
+  } catch (err) {
+    if (
+      err instanceof api.DeezerError ||
+      (err as {statusCode?: number}).statusCode === 403 ||
+      skipIfRateLimited(t, err)
+    ) {
+      skipWithReason(t, `media API unavailable: ${(err as Error).message.slice(0, 80)}`);
+      return;
+    }
+    throw err;
+  }
 });

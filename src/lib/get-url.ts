@@ -2,8 +2,7 @@ import delay from 'delay';
 import {getSongFileName} from '../lib/decrypt';
 import {DeezerError} from '../lib/errors';
 import {headRequest, HttpStatusError} from '../lib/http';
-import instance from '../lib/request';
-import {defaultSession} from '../lib/session';
+import {defaultSession, Session} from '../lib/session';
 import type {trackType} from '../types';
 
 export class WrongLicense extends Error {
@@ -97,13 +96,14 @@ export const formatName = (quality: Quality): string => toFormat(quality);
 
 /** POST media.deezer.com/v1/get_url with re-auth + exponential-backoff retry on 403/429/5xx. */
 const mediaGetUrl = async (
+  session: Session,
   track_tokens: string[],
   formats: {format: string; cipher: 'BF_CBC_STRIPE' | 'NONE'}[],
   attempt = 0,
 ): Promise<{data: any[]; country: string}> => {
-  const user = await defaultSession().loadUserData();
+  const user = await session.loadUserData();
   try {
-    const {data} = await instance.post<any>('https://media.deezer.com/v1/get_url', {
+    const {data} = await session.request<any>('POST', 'https://media.deezer.com/v1/get_url', {
       license_token: user.licenseToken,
       media: [{type: 'FULL', formats}],
       track_tokens,
@@ -113,9 +113,9 @@ const mediaGetUrl = async (
     const status = err instanceof HttpStatusError ? err.statusCode : 0;
     if ((status === 403 || status === 429 || status >= 500) && attempt < MEDIA_MAX_RETRIES) {
       // a stale license token is a common cause — force a refresh before the retry
-      await defaultSession().loadUserData(true);
+      await session.loadUserData(true);
       await delay(500 * 2 ** attempt + Math.floor(Math.random() * 250));
-      return mediaGetUrl(track_tokens, formats, attempt + 1);
+      return mediaGetUrl(session, track_tokens, formats, attempt + 1);
     }
     throw err;
   }
@@ -143,14 +143,15 @@ const cipherIsEncrypted = (cipher: string | undefined, url: string): boolean =>
   cipher ? cipher !== 'NONE' : url.includes('/mobile/') || url.includes('/media/');
 
 const getTrackUrlFromServer = async (
+  session: Session,
   track_token: string,
   format: string,
 ): Promise<{url: string; format: string; cipher: string} | null> => {
-  const user = await defaultSession().loadUserData();
+  const user = await session.loadUserData();
   if ((format === 'FLAC' && !user.canStreamLossless) || (format === 'MP3_320' && !user.canStreamHq)) {
     throw new WrongLicense(format);
   }
-  const {data, country} = await mediaGetUrl([track_token], [{format, cipher: 'BF_CBC_STRIPE'}]);
+  const {data, country} = await mediaGetUrl(session, [track_token], [{format, cipher: 'BF_CBC_STRIPE'}]);
   if (!data.length) return null;
   return parseMediaEntry(data[0], track_token, country);
 };
@@ -158,10 +159,12 @@ const getTrackUrlFromServer = async (
 /**
  * @param track Track info json returned from `getTrackInfo`
  * @param quality 1 = 128kbps, 3 = 320kbps and 9 = flac (around 1411kbps)
+ * @param session which account to resolve for — defaults to the process default
  */
 export const getTrackDownloadUrl = async (
   track: trackType,
   quality: number,
+  session: Session = defaultSession(),
 ): Promise<{trackUrl: string; isEncrypted: boolean; fileSize: number} | null> => {
   let wrongLicense: WrongLicense | null = null;
   let geoBlocked: GeoBlocked | null = null;
@@ -177,7 +180,7 @@ export const getTrackDownloadUrl = async (
   } else {
     // Get URL with the official API
     try {
-      const resolved = await getTrackUrlFromServer(track.TRACK_TOKEN, format);
+      const resolved = await getTrackUrlFromServer(session, track.TRACK_TOKEN, format);
       if (resolved) {
         return {
           trackUrl: resolved.url,
@@ -259,14 +262,17 @@ export interface ResolvedUrl {
  *
  * @param tracks    from `getTrackInfo` / `parseInfo` (needs `TRACK_TOKEN`, `SNG_ID`, `FILESIZE_*`)
  * @param qualities preference order — default `[9, 3, 1]` (FLAC → MP3 320 → MP3 128)
+ * @param session   which account to resolve for — defaults to the process default
  */
 export const resolveDownloadUrls = async (
   tracks: trackType[],
   qualities: Quality[] = [9, 3, 1],
+  session: Session = defaultSession(),
 ): Promise<(ResolvedUrl | null)[]> => {
   if (!tracks.length) return [];
   const formats = qualities.map((q) => ({format: formatName(q), cipher: 'BF_CBC_STRIPE' as const}));
   const {data, country} = await mediaGetUrl(
+    session,
     tracks.map((t) => t.TRACK_TOKEN),
     formats,
   );

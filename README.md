@@ -127,8 +127,17 @@ responses carry account-specific `TRACK_TOKEN`s) and its own query methods:
 | `getArtistInfo(id)` / `getDiscography(id, nb?)` | artist metadata / discography |
 | `getProfile(userId)` | a public profile |
 | `searchMusic(query, types?, nb?)` | search (`deezer.pageSearch`) |
+| `getTrackDownloadUrl(track, quality)` | resolve a CDN URL **as this account** |
+| `resolveDownloadUrls(tracks, qualities?)` | batch-resolve, one request, as this account |
+| `streamTrack(track, quality, opts?)` | constant-memory stream of decrypted audio |
+| `getTrackBuffer(track, quality, opts?)` | download + decrypt fully into a `Buffer` |
 | `gw(body, method)` / `gwLight(body, method)` / `gwGet(method, params?)` | the raw coalesced request channels |
 | `init(arl?)` / `refreshApiToken()` / `loadUserData(force?)` / `invalidateUserData()` | lifecycle |
+
+The free `getTrackDownloadUrl(track, quality, session?)` / `resolveDownloadUrls(…, session?)`
+/ `streamTrackDownload(…, {session})` all take an optional session too;
+`downloadTrackBuffer(track, quality, opts?)` is the free-function form of
+`session.getTrackBuffer`.
 
 ```js
 await initDeezerApi(arl);                 // default session, as before

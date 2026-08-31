@@ -2,6 +2,7 @@ import {PassThrough, Readable} from 'stream';
 import {createDecryptStream} from './decrypt';
 import {getStream} from './http';
 import {getTrackDownloadUrl} from './get-url';
+import type {Session} from './session';
 import type {trackType} from '../types';
 
 const CHUNK = 2048;
@@ -15,6 +16,8 @@ export interface StreamTrackOptions {
   resumeFrom?: number;
   /** progress callback — `(bytesReceived, totalBytes)`; `total` is 0 when unknown */
   onProgress?: (received: number, total: number) => void;
+  /** which account to download as — defaults to the process default session */
+  session?: Session;
 }
 
 export interface TrackStream {
@@ -46,7 +49,7 @@ export const streamTrackDownload = async (
   quality: number,
   options: StreamTrackOptions = {},
 ): Promise<TrackStream> => {
-  const resolved = await getTrackDownloadUrl(track, quality);
+  const resolved = await getTrackDownloadUrl(track, quality, options.session);
   if (!resolved) {
     throw new Error(`Track ${track.SNG_ID} is unavailable at quality ${quality}`);
   }
@@ -79,4 +82,31 @@ export const streamTrackDownload = async (
     startedAt,
     isEncrypted: resolved.isEncrypted,
   };
+};
+
+/**
+ * Download + decrypt a track fully into memory. Convenience over
+ * {@link streamTrackDownload} for callers that just want the bytes (no tagging —
+ * pipe through `addTrackTags` yourself). `null` when the track+quality can't be
+ * resolved. Does **not** support resume.
+ */
+export const downloadTrackBuffer = async (
+  track: trackType,
+  quality: number,
+  options: Omit<StreamTrackOptions, 'resumeFrom'> = {},
+): Promise<Buffer | null> => {
+  let ts: TrackStream;
+  try {
+    ts = await streamTrackDownload(track, quality, {onProgress: options.onProgress, session: options.session});
+  } catch (err) {
+    if (err instanceof Error && /unavailable at quality/.test(err.message)) {
+      return null;
+    }
+    throw err;
+  }
+  const chunks: Buffer[] = [];
+  for await (const chunk of ts.stream) {
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks);
 };
