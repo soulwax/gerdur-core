@@ -1,4 +1,5 @@
 import client from '../lib/request';
+import {DeezerError} from '../lib/errors';
 import lru from './cache';
 
 /**
@@ -48,12 +49,12 @@ export const request = async (body: object, method: string) => {
       data: {error, results},
     } = await client.post<any>('/gateway.php', body, {params: {method}});
 
-    if (Object.keys(results).length > 0) {
+    if (results && Object.keys(results).length > 0) {
       lru.set(cacheKey, results);
       return results;
     }
 
-    throw new Error(Object.entries(error).join(', '));
+    throw new DeezerError(error);
   });
 };
 
@@ -71,12 +72,12 @@ export const requestLight = async (body: object, method: string) => {
       params: {method, api_version: '1.0'},
     });
 
-    if (Object.keys(results).length > 0) {
+    if (results && Object.keys(results).length > 0) {
       lru.set(cacheKey, results);
       return results;
     }
 
-    throw new Error(Object.entries(error).join(', '));
+    throw new DeezerError(error);
   });
 };
 
@@ -92,12 +93,12 @@ export const requestGet = async (method: string, params: Record<string, any> = {
       data: {error, results},
     } = await client.get<any>('/gateway.php', {params: {method, ...params}});
 
-    if (Object.keys(results).length > 0) {
+    if (results && Object.keys(results).length > 0) {
       lru.set(cacheKey, results);
       return results;
     }
 
-    throw new Error(Object.entries(error).join(', '));
+    throw new DeezerError(error);
   });
 };
 
@@ -110,8 +111,7 @@ export const requestPublicApi = async (slug: string) => {
     const {data} = await client.get<any>('https://api.deezer.com' + slug);
 
     if (data.error) {
-      const errorMessage = Object.entries(data.error).join(', ');
-      throw new Error(errorMessage);
+      throw new DeezerError(data.error);
     }
 
     lru.set(slug, data);

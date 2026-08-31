@@ -1,5 +1,6 @@
 import delay from 'delay';
 import {getSongFileName} from '../lib/decrypt';
+import {DeezerError} from '../lib/errors';
 import {headRequest, HttpStatusError} from '../lib/http';
 import instance from '../lib/request';
 import type {trackType} from '../types';
@@ -154,7 +155,7 @@ const parseMediaEntry = (
     const {code} = entry.errors[0];
     if (code === 2002) throw new GeoBlocked(country);
     if (code === 2000 || code === 2001) throw new ExpiredTrackToken(token);
-    throw new Error(Object.entries(entry.errors[0]).join(', '));
+    throw new DeezerError(entry.errors[0]);
   }
   const media = entry?.media?.[0];
   if (!media?.sources?.length) return null;

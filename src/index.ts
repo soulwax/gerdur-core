@@ -1,4 +1,6 @@
-export {initDeezerApi} from './lib/request';
+export {initDeezerApi, RETRY_POLICY} from './lib/request';
+export {DeezerError} from './lib/errors';
+export type {DeezerErrorPayload} from './lib/errors';
 export * from './api';
 export * from './converter';
 export * from './lib/decrypt';

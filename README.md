@@ -82,7 +82,20 @@ if (model.lyricsSynced) fs.writeFileSync(track.SNG_TITLE + '.lrc', model.lyricsS
 
 ## Methods
 
-All method returns `Object` or throws `Error`. Make sure to catch error on your side.
+Every method returns an `Object` or throws. Gateway / media-API failures throw a
+**`DeezerError`** (`extends Error`) with:
+
+| Field | |
+| :--- | :--- |
+| `code` | Deezer's numeric error code, when it sent one (e.g. `4`, `800`) |
+| `keys` | the gateway error keys, e.g. `['VALID_TOKEN_REQUIRED']`, `['DATA_ERROR']` |
+| `retryable` | whether a retry could plausibly succeed |
+| `payload` | the raw error object |
+
+Retries are bounded — `RETRY_POLICY` (exported) sets per-class attempt caps and a
+30 s wall-clock deadline, so a persistently failing endpoint surfaces a
+`DeezerError` instead of spinning. `GeoBlocked`, `WrongLicense` and
+`ExpiredTrackToken` are still thrown as their own types from the download path.
 
 ### `.initDeezerApi(arl_cookie);`
 

@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.4.0 - 2026-08-31
+
+Phase 3.3 — deterministic retries and typed errors.
+
+### Fixed
+
+- **The gateway retry loop had no cap** on `error.code === 4`,
+  `NEED_API_AUTH_REQUIRED`, or `GATEWAY_ERROR` — a failing endpoint could spin
+  forever. `requestWithRetry` is now a bounded loop: per-class attempt caps
+  (`code 4` ×6, re-auth ×3, token refresh ×15), full-jittered exponential
+  backoff, and a 30 s wall-clock deadline. On exhaustion it throws.
+
+### Added
+
+- **`DeezerError`** (`extends Error`) — thrown for gateway / media-API failures
+  instead of `new Error(Object.entries(error).join(', '))`. Carries `code`,
+  `keys`, `retryable`, and the raw `payload`. `message` stays human-readable.
+- **`RETRY_POLICY`** — the exported, inspectable retry configuration.
+
+### Changed
+
+- Gateway helpers (`request`, `requestLight`, `requestGet`, `requestPublicApi`)
+  and `resolveDownloadUrls` now throw `DeezerError`. `message` text changed shape
+  (`"KEY: value"` rather than `"KEY,value"`); read `err.code` / `err.keys`
+  instead of matching the string.
+
 ## 2.3.0 - 2026-08-31
 
 Phase 2.1 — all the formats, and previews. Additive; the `1 / 3 / 9` path is
