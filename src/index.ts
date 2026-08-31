@@ -1,4 +1,5 @@
-export {initDeezerApi, RETRY_POLICY} from './lib/request';
+export {initDeezerApi, createSession, defaultSession, Session, RETRY_POLICY, DEFAULT_ARL} from './lib/session';
+export type {SessionUserData} from './lib/session';
 export {DeezerError} from './lib/errors';
 export type {DeezerErrorPayload} from './lib/errors';
 export * from './api';

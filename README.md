@@ -97,6 +97,32 @@ Retries are bounded — `RETRY_POLICY` (exported) sets per-class attempt caps an
 `DeezerError` instead of spinning. `GeoBlocked`, `WrongLicense` and
 `ExpiredTrackToken` are still thrown as their own types from the download path.
 
+### Sessions
+
+A **`Session`** owns one account's state — the `arl`, the HTTP client (`sid` /
+`api_token`), and the account's `license_token` / `country` / streaming rights,
+plus the bounded-retry loop and token refresh. This state used to be
+module-level globals; bundling it means multiple accounts can coexist.
+
+- **`initDeezerApi(arl)`** — (re)authenticate the **default** session. Every free
+  function (`getTrackInfo`, `searchMusic`, `getTrackDownloadUrl`, …) runs against
+  it. Unchanged: same signature, returns the gateway `SESSION` id.
+- **`createSession(arl?)`** — an **isolated** session you hold and inspect:
+  `session.arl`, `session.sid`, and — after `await session.loadUserData()` —
+  `session.country`, `session.licenseToken`, `session.canStreamLossless`,
+  `session.canStreamHq`. `loadUserData()` caches for 25 min and refreshes on a
+  media-API 403.
+- **`defaultSession()`** — the `Session` the free functions use.
+
+```js
+await initDeezerApi(arl);                 // default session, as before
+const track = await getTrackInfo('3135556');
+
+const s = await createSession(otherArl);  // a second account, isolated
+await s.loadUserData();
+console.log(s.country, s.canStreamLossless);
+```
+
 ### `.initDeezerApi(arl_cookie);`
 
 > It is recommended that you first init the app with this method using your arl cookie.

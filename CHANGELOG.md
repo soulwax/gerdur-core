@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.7.0 - 2026-08-31
+
+Phase 3.2 — session lifecycle. The scattered module-level state
+(`request.ts`: `arl` / `sid` / `api_token`; `get-url.ts`: `license_token` /
+`country` / streaming rights) is consolidated into one **`Session`** object.
+Backwards compatible — `initDeezerApi` and every free function are unchanged.
+
+### Added
+
+- **`Session`** — owns one account's `arl`, HTTP client (`sid` / `api_token`),
+  `license_token` / `country` / `canStreamLossless` / `canStreamHq`, the
+  bounded-retry request loop, and token refresh (`init`, `refreshApiToken`,
+  `loadUserData`).
+- **`createSession(arl?)`** — an isolated session you hold and inspect, so
+  multiple accounts can be used concurrently.
+- **`defaultSession()`** — the process-wide session `initDeezerApi` and the free
+  functions run against. `setDefaultSession(session)` swaps it.
+- `SessionUserData` type; `DEFAULT_ARL` constant.
+
+### Changed
+
+- **Proactive `license_token` refresh** — `loadUserData()` caches the account's
+  media-API credentials for 25 min and force-refreshes on a media 403, instead of
+  only re-fetching after a failed download. Fewer opaque CDN 403s on long
+  playlists.
+- `RETRY_POLICY` now lives in `lib/session.ts` (still exported, same shape).
+
 ## 2.6.0 - 2026-08-31
 
 Phase 2.4 round 2 — Flow, radios, and a user's library. All public REST, all
