@@ -526,6 +526,29 @@ model.contributors;  // normalised producers / engineers / performers / …
 | `richCredits` | `true` | hydrate credits + BPM for album/playlist tracks that omit them |
 | `deezerIds` / `includeRank` | `true` | write `DEEZER_*_ID` / popularity rank |
 
+**On a server, tag as a stream instead.** `addTrackTags` must materialise the
+whole file, which is what caps concurrency. `createTagStream` produces
+byte-identical output without ever holding the audio — both containers keep
+their metadata at the front, so only the header is buffered (a few KB for MP3;
+the source's own metadata region for FLAC):
+
+```ts
+import {pipeline} from 'stream/promises';
+import {streamTrackDownload, resolveTagModel, createTagStream} from 'gerdur-core';
+
+const model = await resolveTagModel(track);          // the fetches, no audio
+const {stream} = await streamTrackDownload(track, 9);
+await pipeline(stream, createTagStream(model), createWriteStream('track.flac'));
+```
+
+| 40 MB tracks, concurrent | `addTrackTags` | `createTagStream` |
+| :--- | ---: | ---: |
+| 4 | +239 MB | **+0 MB** |
+| 16 | +965 MB, 986 ms | **+0 MB, 150 ms** |
+
+`resolveTagModel(track, options?)` does exactly what `addTrackTags` does minus
+the writing — same fetches, same coalescing, same `AddTrackTagsOptions`.
+
 Building blocks, if you want the model without writing tags:
 
 - **`getRichAlbum(albId)`** → merged gw + public album metadata (`RichAlbum`).
@@ -624,9 +647,11 @@ cacheStats(); // {shared: {size, maxSize, hits, misses, inFlight}} — for /metr
 
 ### Running this on a server
 
-- **Stream, don't buffer.** `downloadTrackBuffer` / `getTrackBuffer` hold the
-  whole file (and `Buffer.concat` doubles it briefly) — fine for a script, a
-  memory bomb at concurrency. Use `streamTrackDownload` in a request path.
+- **Stream, don't buffer — including the tags.** `downloadTrackBuffer` /
+  `getTrackBuffer` hold the whole file, and `addTrackTags` holds it again (the
+  tag writers allocate a second copy). Use `streamTrackDownload` +
+  `resolveTagModel` + `createTagStream` for an end-to-end constant-memory path:
+  measured at 16 concurrent 40 MB tracks, **965 MB → ~0 MB**, and 6.5x faster.
 - **Decryption runs on the event loop.** Blowfish costs ~33 ms per 8 MiB
   (~243 MiB/s), so heavy concurrent traffic will compete with everything else in
   the process. Put the decrypt in a worker if you saturate a core.
@@ -777,7 +802,8 @@ import type {
 <details>
 <summary><b>Tagging</b></summary>
 
-`addTrackTags` · `buildTagModel` · `getRichAlbum` · `normalizeContributors` ·
+`addTrackTags` · `resolveTagModel` · `createTagStream` · `probeAudioOffset` ·
+`buildTagModel` · `getRichAlbum` · `normalizeContributors` ·
 `toLrc` · `downloadAlbumCover` · `downloadArtistImage` · `MAX_COVER_SIZE`
 </details>
 

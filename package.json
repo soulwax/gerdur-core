@@ -1,6 +1,6 @@
 {
   "name": "gerdur-core",
-  "version": "2.14.0",
+  "version": "2.15.0",
   "description": "Deezer API client, cross-service URL resolution, Blowfish track decryption and MP3/FLAC metadata tagging — the engine behind the gerdur CLI.",
   "keywords": [
     "deezer",
