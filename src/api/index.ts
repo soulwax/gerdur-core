@@ -5,3 +5,4 @@ export * from './browse';
 export * from './preview';
 export * from './user';
 export * from './podcast';
+export * from './library';

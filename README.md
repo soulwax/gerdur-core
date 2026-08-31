@@ -46,6 +46,7 @@ the CLI and the file-writing layer on top.
   - [Search](#search)
   - [Browse and discover](#browse-and-discover)
   - [Flow, radios and a user's library](#flow-radios-and-a-users-library)
+  - [Your own library](#your-own-library)
   - [Podcasts](#podcasts)
   - [Preview clips](#preview-clips)
   - [Resolve a download URL](#resolve-a-download-url)
@@ -380,6 +381,33 @@ const {data: flow} = await getUserFlow(me.USER_ID);
 const {data: loved} = await getUserFavoriteTracks(me.USER_ID);
 const {data: eighties} = await getRadioTracks(38305); // "The '80s"
 ```
+
+### Your own library
+
+`api/user.ts` above reads a **public** profile. These read what the *account*
+can see — private playlists included — over the authenticated gateway, and
+return gateway shapes, so tracks come with a `TRACK_TOKEN` and are immediately
+downloadable.
+
+| Function | Returns |
+| :--- | :--- |
+| `getMyPlaylists(userId?, nb?, start?)` | the account's own playlists, **including private ones** |
+| `getMyFavoriteTracks(userId?, nb?, start?)` | loved tracks, as downloadable gw tracks |
+| `getMyFavoriteTrackIds()` | every loved track id in one request — for diffing a local library |
+| `getMyFavoriteAlbums` / `getMyFavoriteArtists` | favourited albums / artists |
+| `getMyFavoritePlaylists` / `getMyFavoriteRadios` / `getMyFavoriteShows` | followed playlists / radios / shows |
+| `getTrackMix(sngId, nb?, start?)` | a "more like this" mix seeded from a track — **tokens already attached** |
+
+```ts
+import {getMyPlaylists, getTrackMix, resolveDownloadUrls} from 'gerdur-core';
+
+const {data: playlists} = await getMyPlaylists();       // yours, private included
+const {data: mix} = await getTrackMix('3135556', 20);   // 20 tracks like this one
+const urls = await resolveDownloadUrls(mix, [9, 3, 1]); // straight to download — no per-track lookup
+```
+
+`userId` defaults to the logged-in account. These are account-scoped, so they
+never enter the shared cross-session cache.
 
 ### Podcasts
 
@@ -787,7 +815,10 @@ import type {
 
 `getUserFlow` · `getUserFavoriteTracks` · `getUserFavoriteAlbums` ·
 `getUserFavoriteArtists` · `getUserPlaylists` · `getUserRadios` ·
-`getUserChartTracks` · `getRadios` · `getRadioTracks` · `getRadioGenres`
+`getUserChartTracks` · `getRadios` · `getRadioTracks` · `getRadioGenres` ·
+`getMyPlaylists` · `getMyFavoriteTracks` · `getMyFavoriteTrackIds` ·
+`getMyFavoriteAlbums` · `getMyFavoriteArtists` · `getMyFavoritePlaylists` ·
+`getMyFavoriteRadios` · `getMyFavoriteShows` · `getTrackMix`
 </details>
 
 <details>

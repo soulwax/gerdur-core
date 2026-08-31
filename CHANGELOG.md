@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.17.0 - 2026-08-31
+
+The account's own library, over the authenticated gateway.
+
+### Added
+
+- **`src/api/library.ts`** — the logged-in account's *private* library. Distinct
+  from the public-REST surface in `api/user.ts`, which needs a public profile and
+  only shows what that profile exposes. Found by probing the gateway: seven
+  methods answer here that the public API cannot reach.
+  - `getMyPlaylists(userId?, nb?, start?)` — **including private playlists**
+  - `getMyFavoriteTracks` / `getMyFavoriteAlbums` / `getMyFavoriteArtists`
+  - `getMyFavoritePlaylists` / `getMyFavoriteRadios` / `getMyFavoriteShows`
+  - `getMyFavoriteTrackIds()` — every loved track id in one small request, for
+    diffing a local library against the account
+  - `userId` defaults to the logged-in account. Responses are gateway shapes, so
+    tracks arrive with a `TRACK_TOKEN` and are directly downloadable; being
+    account-scoped they stay in the per-session cache and are never shared.
+- **`getTrackMix(sngId, nb?, start?)`** (`song.getSearchTrackMix`) — a "more like
+  this" mix seeded from one track. Unlike the public radio endpoints it returns
+  full gateway tracks **with tokens already attached**: verified that
+  `resolveDownloadUrls` resolves them 3/3 with no `getTrackInfo` round trip.
+
+Verified against a live account: `getMyPlaylists` 1/1, `getMyFavoriteArtists`
+7/7 with real names, `getTrackMix` 5/5 all carrying tokens.
+
 ## 2.16.0 - 2026-08-31
 
 ### Added
