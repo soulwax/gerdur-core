@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.13.1 - 2026-08-31
+
+### Docs
+
+- **README rewritten** — restructured around use cases (a task-oriented guide
+  covering auth, lookups, URL/ISRC/UPC resolution, both search APIs, browse,
+  Flow/library, podcasts, previews, URL resolution, buffered and streamed
+  downloads, decryption, tagging, enrichment, multi-account sessions and the HTTP
+  helpers), a full collapsible API reference, an errors table and a types
+  summary. npm-facing tone: badges, single-line description, no internal-project
+  references.
+- `package.json` `description` rewritten and `keywords` added for npm search.
+
+No code changes.
+
 ## 2.13.0 - 2026-08-31
 
 ### Added

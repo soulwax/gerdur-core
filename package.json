@@ -1,7 +1,24 @@
 {
   "name": "gerdur-core",
-  "version": "2.13.0",
-  "description": "Core module for gerdur.",
+  "version": "2.13.1",
+  "description": "Deezer API client, cross-service URL resolution, Blowfish track decryption and MP3/FLAC metadata tagging — the engine behind the gerdur CLI.",
+  "keywords": [
+    "deezer",
+    "deezer-api",
+    "spotify",
+    "tidal",
+    "isrc",
+    "music",
+    "metadata",
+    "id3",
+    "flac",
+    "lyrics",
+    "lrc",
+    "musicbrainz",
+    "cover-art",
+    "decrypt",
+    "blowfish"
+  ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
