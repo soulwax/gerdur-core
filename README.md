@@ -27,6 +27,10 @@ It has **no CLI and does no disk I/O** — every function returns data or a
 `Buffer`/stream. The [`gerdur`](https://www.npmjs.com/package/gerdur) package is
 the CLI and the file-writing layer on top.
 
+> **Coming from `@soulwax/d-fi-core`?** `gerdur-core` is its continuation — a
+> near drop-in rename plus one `addTrackTags` change. See
+> **[MIGRATING.md](MIGRATING.md)**.
+
 ---
 
 ## Contents
@@ -55,6 +59,7 @@ the CLI and the file-writing layer on top.
 - [Errors](#errors)
 - [Types](#types)
 - [API reference](#api-reference)
+- [Migrating from @soulwax/d-fi-core](#migrating)
 - [The name](#the-name)
 - [Legal](#legal)
 
@@ -761,6 +766,17 @@ import type {
 
 See the [FAQ](docs/faq.md) and the [`gerdur` CLI](https://www.npmjs.com/package/gerdur)
 for end-to-end usage.
+
+<a id="migrating"></a>
+
+## Migrating from @soulwax/d-fi-core
+
+`gerdur-core` is the continuation of `@soulwax/d-fi-core`. `gerdur-core@1.0.1` is
+that codebase renamed; everything since is additive except a single `addTrackTags`
+signature change. **[MIGRATING.md](MIGRATING.md)** has the exact steps —
+dependency swap, import rename, the one fix, the workarounds you can now delete,
+and the faster primitives (`downloadTrackBuffer`, batch `resolveDownloadUrls`,
+`streamTrackDownload`, `Session`, `DeezerError`) to adopt.
 
 ## The name
 
