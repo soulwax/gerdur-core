@@ -49,6 +49,23 @@ export const RETRY_POLICY = {
   deadlineMs: 30_000,
 };
 
+// A shared cooldown + circuit breaker across a session's concurrent requests was
+// built and measured against this loop, then dropped. Numbers, 60 concurrent
+// requests against a permanently rate-limited endpoint (baseline 420 wire calls
+// / 8.5s):
+//   - as first written (trip after 5 rounds, escalating shared cooldown):
+//     420 calls / 36s — strictly worse. The retry cap is per request, so
+//     synchronising the waits changes nothing about total calls and only
+//     lengthens them.
+//   - tuned hard (open on the first rate-limited round, 300ms cooldown):
+//     60 calls / 0.2s, but a *single* request meeting one transient `code: 4`
+//     then fails outright, where this loop retries and succeeds.
+// The flaw is structural: the request that trips the breaker is immediately
+// blocked by its own trip. A correct version has to tell new work apart from an
+// in-flight retry — shed the former, never the latter — which means threading
+// per-request attempt state through the gate. Worth doing only with a real
+// workload to tune against; guessing made it worse twice.
+
 /** Exponential backoff (ms) with full jitter on the top half of the window. */
 const backoffDelay = (attempt: number): number => {
   const windowMs = Math.min(RETRY_POLICY.baseMs * 2 ** attempt, RETRY_POLICY.maxDelayMs);
