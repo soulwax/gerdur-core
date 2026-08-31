@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.12.0 - 2026-08-31
+
+Phase 4 — an optional, read-only **enrichment** layer against open databases.
+Off by default, never touches `addTrackTags`.
+
+### Added
+
+- **MusicBrainz** (`src/enrich/`): `lookupRecordingByISRC(isrc)` — canonical
+  recording (title, artist credits, length, every known ISRC, the releases it's
+  on); `getMusicBrainzRecording(mbid)` / `getMusicBrainzRelease(mbid, inc?)` —
+  direct MBID lookups with label / catalogue number / barcode.
+  `configureMusicBrainz({userAgent, minIntervalMs})` — they require a descriptive
+  UA and ≤ 1 req/s.
+- **Cover Art Archive**: `getCoverArt(mbid, entity?)` and
+  `getBestCoverArtUrl(mbid, {minSize})` — higher-resolution covers than Deezer's
+  1800 px ceiling. `null` when there's no art.
+- **`PoliteJsonClient`** — the serialised, rate-limited, `503`/`429`-retrying,
+  `404`→`null` JSON client both use; exported for building your own.
+
 ## 2.11.0 - 2026-08-31
 
 ### Added

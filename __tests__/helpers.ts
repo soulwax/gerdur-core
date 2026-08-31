@@ -45,11 +45,15 @@ export const skipIfRateLimited = (t: TestContext, err: unknown): boolean => {
   const rateLimited =
     status === 429 ||
     status === 403 ||
+    status === 503 ||
+    (typeof status === 'number' && status >= 500) ||
     code === 4 ||
     code === 'ECONNRESET' ||
     code === 'ETIMEDOUT' ||
     code === 'EAI_AGAIN' ||
-    /Quota|quota exceeded|too many requests|status code (429|403)|consent|socket hang up|timed out/i.test(message);
+    /Quota|quota exceeded|too many requests|status code (429|403|50\d)|consent|busy|socket hang up|timed out/i.test(
+      message,
+    );
   if (rateLimited) {
     skipWithReason(t, `Skipping: an upstream API is rate-limiting / unavailable (${message.slice(0, 80)}).`);
     return true;
