@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.13.3 - 2026-08-31
+
+### Docs
+
+- **`MIGRATING.md`** — a migration guide from `@soulwax/d-fi-core`: dependency
+  swap, import rename, the one breaking `addTrackTags` change, the local
+  workarounds that can now be deleted (OpenSSL-3 Blowfish fallback, per-track
+  URL-retry loops, manual album-info caching, `code === 4` spin guards), and the
+  faster primitives to adopt (`downloadTrackBuffer`, batch `resolveDownloadUrls`,
+  `streamTrackDownload`, `Session` / `createSession`, `DeezerError`). Linked from
+  the README and shipped in the package.
+
 ## 2.13.2 - 2026-08-31
 
 ### Changed
