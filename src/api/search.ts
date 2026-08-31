@@ -8,6 +8,7 @@ import type {
   searchResultArtist,
   searchResultPlaylist,
   searchResultTrack,
+  searchType,
   suggestResult,
 } from '../types';
 
@@ -146,3 +147,32 @@ export const suggest = (query: string, nb = 5): Promise<suggestResult> =>
     },
     'deezer.suggest',
   );
+
+/** Per-type total hit counts + Deezer's own relevance ordering, from a `searchMusic` result. */
+export interface SearchFacets {
+  track: number;
+  album: number;
+  artist: number;
+  playlist: number;
+  radio: number;
+  show: number;
+  user: number;
+  /** the type order Deezer considers most relevant for this query, e.g. `['TOP_RESULT','ARTIST','TRACK',…]` */
+  order: string[];
+}
+
+/**
+ * Pull the facet counts out of a `searchMusic` (`deezer.pageSearch`) result —
+ * `pageSearch` already returns `TRACK.total`, `ALBUM.total`, … and an `ORDER`;
+ * this just surfaces them in one flat object for "N tracks · M albums · …" UIs.
+ */
+export const searchFacets = (result: searchType): SearchFacets => ({
+  track: result.TRACK?.total ?? 0,
+  album: result.ALBUM?.total ?? 0,
+  artist: result.ARTIST?.total ?? 0,
+  playlist: result.PLAYLIST?.total ?? 0,
+  radio: result.RADIO?.total ?? 0,
+  show: result.SHOW?.total ?? 0,
+  user: result.USER?.total ?? 0,
+  order: (result.ORDER as string[]) ?? [],
+});

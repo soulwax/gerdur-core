@@ -1,5 +1,9 @@
 import test from 'ava';
 import {youtube} from '../../src';
+import {shouldSkipBecauseUnavailable, skipWithReason} from '../helpers';
+
+const YT_BLOCKED = [429, 403];
+const YT_BLOCKED_FRAGMENTS = ['consent', 'Too Many Requests', 'status code 429'];
 
 // The Weeknd - I Feel It Coming ft. Daft Punk (Official Video)
 const VALID_VIDEO = 'qFLhGq0060w';
@@ -9,7 +13,16 @@ const INVALID_VIDEO = 'BaW_jenozKc';
 
 if (!process.env.CI) {
   test('GET TRACK INFO', async (t) => {
-    const response = await youtube.track2deezer(VALID_VIDEO);
+    let response;
+    try {
+      response = await youtube.track2deezer(VALID_VIDEO);
+    } catch (err) {
+      if (shouldSkipBecauseUnavailable(err, YT_BLOCKED, YT_BLOCKED_FRAGMENTS)) {
+        skipWithReason(t, 'Skipping YouTube: it is rate-limiting / consent-walling this IP.');
+        return;
+      }
+      throw err;
+    }
 
     t.truthy(response.SNG_ID);
     t.is(response.SNG_TITLE, 'I Feel It Coming');
@@ -22,6 +35,10 @@ if (!process.env.CI) {
       await youtube.track2deezer(INVALID_VIDEO);
       t.fail();
     } catch (err: any) {
+      if (shouldSkipBecauseUnavailable(err, YT_BLOCKED, YT_BLOCKED_FRAGMENTS)) {
+        skipWithReason(t, 'Skipping YouTube: it is rate-limiting / consent-walling this IP.');
+        return;
+      }
       t.true(err.message.includes('No track found for youtube video ' + INVALID_VIDEO));
     }
   });

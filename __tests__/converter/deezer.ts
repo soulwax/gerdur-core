@@ -1,5 +1,6 @@
 import test from 'ava';
 import * as api from '../../src';
+import {skipIfRateLimited} from '../helpers';
 
 // Harder, Better, Faster, Stronger by Daft Punk
 const SNG_TITLE = 'Harder, Better, Faster, Stronger';
@@ -10,7 +11,13 @@ const ALB_TITLE = 'Discovery';
 const UPC = '724384960650';
 
 test.serial('GET TRACK ISRC', async (t) => {
-  const response = await api.isrc2deezer(SNG_TITLE, ISRC);
+  let response;
+  try {
+    response = await api.isrc2deezer(SNG_TITLE, ISRC);
+  } catch (err) {
+    if (!skipIfRateLimited(t, err)) throw err;
+    return;
+  }
 
   t.is(response.SNG_TITLE, SNG_TITLE);
   t.is(response.ISRC, ISRC);
@@ -19,7 +26,14 @@ test.serial('GET TRACK ISRC', async (t) => {
 });
 
 test.serial('GET ALBUM UPC', async (t) => {
-  const [album, tracks] = await api.upc2deezer(ALB_TITLE, UPC);
+  let result: Awaited<ReturnType<typeof api.upc2deezer>>;
+  try {
+    result = await api.upc2deezer(ALB_TITLE, UPC);
+  } catch (err) {
+    if (!skipIfRateLimited(t, err)) throw err;
+    return;
+  }
+  const [album, tracks] = result;
 
   t.is(album.ALB_TITLE, ALB_TITLE);
   t.is(album.UPC, UPC);

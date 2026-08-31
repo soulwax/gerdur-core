@@ -33,17 +33,25 @@ export const shouldSkipBecauseUnavailable = (err: unknown, statuses: number[], f
 };
 
 /**
- * Deezer's public REST API throttles bursts with `code: 4` ("Quota exceeded")
- * and HTTP 429. Passing/skipping on that keeps the live-API suite green when it
- * runs many public-API tests in parallel.
+ * External APIs (Deezer public REST, Tidal, YouTube) throttle bursts — `code: 4`
+ * ("Quota exceeded"), HTTP 429/403, consent walls, dropped connections. Skipping
+ * on any of those keeps the live-API suite green when it hammers them in
+ * parallel; a genuine bug still surfaces as a real assertion failure.
  */
 export const skipIfRateLimited = (t: TestContext, err: unknown): boolean => {
   const message = getErrorMessage(err);
   const status = getErrorStatus(err);
+  const code = (err as {code?: unknown})?.code;
   const rateLimited =
-    status === 429 || (err as {code?: unknown})?.code === 4 || /Quota|quota exceeded|too many requests/i.test(message);
+    status === 429 ||
+    status === 403 ||
+    code === 4 ||
+    code === 'ECONNRESET' ||
+    code === 'ETIMEDOUT' ||
+    code === 'EAI_AGAIN' ||
+    /Quota|quota exceeded|too many requests|status code (429|403)|consent|socket hang up|timed out/i.test(message);
   if (rateLimited) {
-    skipWithReason(t, `Skipping: Deezer public API is rate-limiting (${message.slice(0, 80)}).`);
+    skipWithReason(t, `Skipping: an upstream API is rate-limiting / unavailable (${message.slice(0, 80)}).`);
     return true;
   }
   return false;

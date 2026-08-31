@@ -1,6 +1,6 @@
 import test from 'ava';
 import {tidal} from '../../src';
-import {shouldSkipBecauseUnavailable, skipWithReason} from '../helpers';
+import {shouldSkipBecauseUnavailable, skipIfRateLimited, skipWithReason} from '../helpers';
 
 // Work (feat. Drake)
 const SNG_TITLE = 'Work';
@@ -28,7 +28,13 @@ test('GET TRACK INFO', async (t) => {
 });
 
 test('GET TRACK --> DEEZER', async (t) => {
-  const track = await tidal.track2deezer(SNG_ID);
+  let track;
+  try {
+    track = await tidal.track2deezer(SNG_ID);
+  } catch (err) {
+    if (!skipIfRateLimited(t, err)) throw err;
+    return;
+  }
 
   t.is(track.SNG_ID, '118190298');
   t.is(track.ISRC, ISRC);
@@ -45,7 +51,14 @@ test('GET ALBUM INFO', async (t) => {
 });
 
 test('GET ALBUM --> DEEZER', async (t) => {
-  const [album, tracks] = await tidal.album2deezer(ALB_ID);
+  let result: Awaited<ReturnType<typeof tidal.album2deezer>>;
+  try {
+    result = await tidal.album2deezer(ALB_ID);
+  } catch (err) {
+    if (!skipIfRateLimited(t, err)) throw err;
+    return;
+  }
+  const [album, tracks] = result;
 
   t.is(album.ALB_ID, '12279688');
   t.is(album.UPC, UPC.slice(2));
