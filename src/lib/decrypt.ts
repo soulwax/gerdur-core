@@ -36,9 +36,23 @@ const getBlowfishKey = (trackId: string): Buffer => {
 
 const CHUNK = 2048;
 
-// Note: memoising the initialised Blowfish schedule per track was measured and
-// rejected — key setup is 39.7µs against 33ms to decrypt an 8 MiB file (0.12%),
-// break-even at ~10 KiB decrypted per key. Not worth the cache.
+// Two optimisations were built, measured and rejected here:
+//
+// 1. Memoising the initialised Blowfish schedule per track. Key setup is 39.7µs
+//    against 33ms to decrypt an 8 MiB file (0.12%), break-even at ~10 KiB
+//    decrypted per key.
+// 2. A worker_threads pool, to move Blowfish off the event loop. Decrypting
+//    4 MB batches synchronously it looked like a big win (2.6x throughput,
+//    4.5x less p95 lag) — but that benchmark manufactured the problem. Through
+//    a real pipeline the in-thread stream below already shows **p95 loop lag of
+//    0.0ms**, because it works a socket read at a time rather than a whole file,
+//    and the pooled version came out at 0.72x once three extra 4 MB copies per
+//    batch (concat, transfer-slice, worker return-slice) were paid. Decrypt only
+//    becomes the binding constraint above ~265 MB/s of aggregate download in one
+//    process, and Deezer's quota bites long before that.
+//
+// Don't re-attempt either without a workload that actually shows decrypt as the
+// bottleneck.
 
 /**
  * Decrypt a downloaded track. Deezer applies Blowfish-CBC "stripe" obfuscation:

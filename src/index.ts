@@ -11,6 +11,13 @@ export * from './converter';
 export * from './lib/decrypt';
 export * from './lib/get-url';
 export * from './lib/stream-download';
+export {
+  createPooledDecryptStream,
+  configureDecryptPool,
+  decryptPoolStats,
+  shutdownDecryptPool,
+} from './lib/decrypt-pool';
+export type {DecryptPoolOptions} from './lib/decrypt-pool';
 export * from './enrich';
 export {httpAgent, httpsAgent, getBuffer, getJson, getText, getStream} from './lib/http';
 export type {StreamResponse} from './lib/http';
