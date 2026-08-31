@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.9.0 - 2026-08-31
+
+Phase 3.2 (cont.) — downloads are session-aware. Additive.
+
+### Added
+
+- **`Session.getTrackDownloadUrl` / `resolveDownloadUrls` / `streamTrack` /
+  `getTrackBuffer`** — resolve and download **as a specific account**, so a
+  `createSession(arl)` client is now end-to-end usable.
+- **`downloadTrackBuffer(track, quality, options?)`** — download + decrypt a
+  track fully into a `Buffer` (no tagging), free-function form of
+  `session.getTrackBuffer`.
+- `getTrackDownloadUrl(track, quality, session?)`, `resolveDownloadUrls(tracks,
+  qualities?, session?)` and `streamTrackDownload(track, quality, {session})`
+  gained an optional session argument (defaults to the process default).
+
 ## 2.8.0 - 2026-08-31
 
 Phase 3.2 (cont.) — a `Session` is now usable per-account. Additive; free

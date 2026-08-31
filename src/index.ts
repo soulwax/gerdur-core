@@ -1,3 +1,5 @@
+import './lib/session-augment'; // wires the download methods onto Session.prototype
+
 export {initDeezerApi, createSession, defaultSession, Session, RETRY_POLICY, DEFAULT_ARL} from './lib/session';
 export type {SessionUserData} from './lib/session';
 export {DeezerError} from './lib/errors';
