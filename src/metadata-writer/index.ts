@@ -71,6 +71,12 @@ export interface TaggedTrack {
   model: TrackTagModel;
 }
 
+// Per-track by necessity: `SNG_CONTRIBUTORS` is exposed *only* by `song.getData`.
+// Probed against the live gateway — `song.getListData` (the batch endpoint
+// `refreshTrackTokens` uses) returns 44 fields including VERSION, GAIN, ISRC,
+// ART_PICTURE and URL_REWRITING, but no contributors; neither does
+// `song.getListByAlbum`. So a 14-track album costs 14 of these, and the only way
+// to avoid them is `{richCredits: false}`, which trades away credits and BPM.
 const hydrate = async (track: trackType): Promise<trackType> => {
   if (track.SNG_CONTRIBUTORS !== undefined && track.VERSION !== undefined && track.GAIN !== undefined) {
     return track;
