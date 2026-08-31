@@ -289,6 +289,34 @@ Useful for "audition before download" and for CI that shouldn't pull full tracks
 | `data`     |   Yes    | `buffer` | downloaded song buffer |
 | `song_id`  |   Yes    | `string` |               track id |
 
+### Streaming download
+
+For large files / high concurrency — peak memory is ~one 2048-byte stripe
+instead of 2× the file.
+
+- **`streamTrackDownload(track, quality, options?)`** → `{stream, size, startedAt, isEncrypted}`.
+  `stream` is decrypted audio bytes (`get_url` → CDN fetch → stripe-decrypt
+  `Transform` → your sink). `options.onProgress(received, total)`;
+  `options.resumeFrom` (bytes, rounded down to a 2048 boundary) sends a `Range`
+  header and resumes stripe-decryption in phase.
+- **`createDecryptStream(sngId, startChunk?)`** → a `Transform` for your own `pipeline`.
+- **`getStream(url, {rangeStart?})`** → `{stream, headers, status}` — a raw,
+  content-decoded response stream.
+
+```js
+import {pipeline} from 'stream/promises';
+import {createWriteStream} from 'fs';
+
+const {stream} = await streamTrackDownload(track, 9, {
+  onProgress: (got, total) => process.stdout.write(`\r${((got / total) * 100) | 0}%`),
+});
+await pipeline(stream, createWriteStream('track.flac'));
+```
+
+Streaming the **tag write** (rewriting the FLAC metadata block in place, no
+full-file `Buffer.concat`) is not done yet — buffer the result and call
+`addTrackTags`, or tag the file afterward.
+
 ### `.addTrackTags(data, track, options?)`
 
 Resolves album info, credits, lyrics and artwork from Deezer and writes them into

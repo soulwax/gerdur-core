@@ -1,6 +1,8 @@
 import test from 'ava';
+import {Readable, Writable} from 'stream';
+import {pipeline} from 'stream/promises';
 import {Blowfish} from '../src/lib/blowfish';
-import {decryptDownload, TrackDecryptStream} from '../src/lib/decrypt';
+import {createDecryptStream, decryptDownload, TrackDecryptStream} from '../src/lib/decrypt';
 
 // ── Blowfish block-cipher test vectors (the load-bearing primitive) ──────────
 test('Blowfish ECB — canonical test vectors', (t) => {
@@ -53,3 +55,32 @@ test('TrackDecryptStream === decryptDownload for arbitrary chunking', (t) => {
   parts.push(ds.final());
   t.true(Buffer.concat(parts).equals(batch));
 });
+
+test('createDecryptStream (Transform) === decryptDownload', async (t) => {
+  const whole = Buffer.concat([ENC, ENC, ENC, ENC.subarray(0, 900)]); // 4 stripes + tail
+  const batch = decryptDownload(whole, SNG_ID);
+
+  const out: Buffer[] = [];
+  const sink = new Writable({
+    write(c: Buffer, _e, cb) {
+      out.push(c);
+      cb();
+    },
+  });
+  // odd read sizes to exercise the carry buffer
+  await pipeline(Readable.from(chunkBy(whole, 613)), createDecryptStream(SNG_ID), sink);
+  t.true(Buffer.concat(out).equals(batch));
+});
+
+test('createDecryptStream — startChunk resumes stripe phase correctly', (t) => {
+  const whole = Buffer.concat([ENC, ENC, ENC]); // stripes 0,1,2 — 0 and 2 would be... 0 only (0%3)
+  const full = decryptDownload(whole, SNG_ID);
+  // resume from byte 2048 (chunk index 1): decrypt the remaining two stripes with startChunk=1
+  const engine = new TrackDecryptStream(SNG_ID, 1);
+  const tail = Buffer.concat([engine.write(whole.subarray(2048)), engine.final()]);
+  t.true(tail.equals(full.subarray(2048)));
+});
+
+function* chunkBy(buf: Buffer, n: number) {
+  for (let i = 0; i < buf.length; i += n) yield buf.subarray(i, i + n);
+}

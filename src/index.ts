@@ -5,5 +5,7 @@ export * from './api';
 export * from './converter';
 export * from './lib/decrypt';
 export * from './lib/get-url';
-export {httpAgent, httpsAgent, getBuffer, getJson, getText} from './lib/http';
+export * from './lib/stream-download';
+export {httpAgent, httpsAgent, getBuffer, getJson, getText, getStream} from './lib/http';
+export type {StreamResponse} from './lib/http';
 export * from './metadata-writer';

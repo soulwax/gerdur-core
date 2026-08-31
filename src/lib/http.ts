@@ -1,6 +1,7 @@
 import {Agent as HttpAgent, IncomingHttpHeaders, request as httpRequest} from 'http';
 import {Agent as HttpsAgent, request as httpsRequest} from 'https';
-import {brotliDecompressSync, gunzipSync, inflateSync} from 'zlib';
+import {Readable} from 'stream';
+import {brotliDecompressSync, createBrotliDecompress, createGunzip, createInflate, gunzipSync, inflateSync} from 'zlib';
 
 type HttpMethod = 'GET' | 'POST' | 'HEAD';
 type ResponseType = 'buffer' | 'json' | 'text';
@@ -264,6 +265,100 @@ const requestRaw = async (config: RawRequestConfig, redirectCount = 0): Promise<
 
     req.end();
   });
+};
+
+export interface StreamResponse {
+  /** the response body as a Readable — content-decoded (gzip/br/deflate unwrapped) */
+  stream: Readable;
+  headers: IncomingHttpHeaders;
+  status: number;
+  /** the final URL after redirects */
+  url: string;
+}
+
+/**
+ * Like a GET, but resolves with the response **stream** instead of a buffered
+ * body — for large downloads that should not sit in memory. Follows redirects;
+ * rejects with `HttpStatusError` on a non-2xx (buffering only the small error
+ * body). The caller owns the returned stream and must consume or destroy it.
+ */
+const streamRaw = async (
+  config: Omit<RawRequestConfig, 'method' | 'responseType'>,
+  redirectCount = 0,
+): Promise<StreamResponse> => {
+  const requestUrl = buildUrl(config.url, config.baseURL, config.params);
+  const headers = normalizeHeaders(config.headers);
+
+  return await new Promise<StreamResponse>((resolve, reject) => {
+    const isHttps = requestUrl.protocol === 'https:';
+    const requestFn = isHttps ? httpsRequest : httpRequest;
+    const req = requestFn(
+      {
+        agent: isHttps ? httpsAgent : httpAgent,
+        headers,
+        hostname: requestUrl.hostname,
+        method: 'GET',
+        path: requestUrl.pathname + requestUrl.search,
+        port: requestUrl.port,
+        protocol: requestUrl.protocol,
+      },
+      (response) => {
+        const status = response.statusCode ?? 0;
+        const locationHeader = response.headers.location;
+        const location = Array.isArray(locationHeader) ? locationHeader[0] : locationHeader;
+
+        if (location && isRedirectStatus(status) && redirectCount < (config.maxRedirects ?? 5)) {
+          response.resume();
+          streamRaw({...config, baseURL: undefined, url: new URL(location, requestUrl).toString()}, redirectCount + 1)
+            .then(resolve)
+            .catch(reject);
+          return;
+        }
+
+        if (status < 200 || status >= 300) {
+          const chunks: Buffer[] = [];
+          response.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+          response.on('end', () => reject(new HttpStatusError(status, response.headers, Buffer.concat(chunks))));
+          response.on('error', reject);
+          return;
+        }
+
+        const encoding = String(response.headers['content-encoding'] ?? '').toLowerCase();
+        let stream: Readable = response;
+        if (encoding === 'gzip') {
+          stream = response.pipe(createGunzip());
+        } else if (encoding === 'br') {
+          stream = response.pipe(createBrotliDecompress());
+        } else if (encoding === 'deflate') {
+          stream = response.pipe(createInflate());
+        }
+        response.on('error', (err) => stream.destroy(err));
+
+        resolve({stream, headers: response.headers, status, url: requestUrl.toString()});
+      },
+    );
+
+    req.on('error', reject);
+    req.setTimeout(config.timeout ?? 30000, () => {
+      req.destroy(new Error(`Request timed out after ${config.timeout ?? 30000}ms`));
+    });
+    req.end();
+  });
+};
+
+/**
+ * Stream a URL's body (for large downloads — constant memory). Optionally send a
+ * `Range` header to resume from `rangeStart` bytes.
+ */
+export const getStream = async (
+  url: string,
+  config: HttpRequestConfig & {rangeStart?: number} = {},
+): Promise<StreamResponse> => {
+  const headers: HttpHeaders = {...config.headers};
+  if (config.rangeStart && config.rangeStart > 0) {
+    headers.Range = `bytes=${config.rangeStart}-`;
+  }
+  return streamRaw({url, headers, params: config.params, timeout: config.timeout});
 };
 
 const buildUrl = (url: string, baseURL?: string, params?: HttpQuery): URL => {

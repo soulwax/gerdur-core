@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.5.0 - 2026-08-31
+
+Phase 3.1 — streaming download primitives. Additive.
+
+### Added
+
+- **`streamTrackDownload(track, quality, options?)`** — download a track as a
+  stream of decrypted audio (`get_url` → CDN fetch → stripe-decrypt `Transform`
+  → your sink). Peak memory is ~one 2048-byte stripe regardless of file size or
+  concurrency. `options.onProgress(received, total)`; `options.resumeFrom`
+  (bytes, 2048-aligned) sends a `Range` header and resumes stripe decryption
+  in phase. Verified byte-identical to the buffered `decryptDownload` path,
+  resume included.
+- **`createDecryptStream(sngId, startChunk?)`** — a Node `Transform` wrapping the
+  stripe cipher, for composing your own pipelines. `TrackDecryptStream` gained a
+  `startChunk` constructor arg.
+- **`getStream(url, {rangeStart?})`** — a content-decoded response stream from
+  the internal HTTP client (`gunzip` / `brotli` / `inflate` handled), following
+  redirects, rejecting `HttpStatusError` on non-2xx.
+
+Streaming the tag write (in-place FLAC metadata-block rewrite) is still open.
+
 ## 2.4.0 - 2026-08-31
 
 Phase 3.3 — deterministic retries and typed errors.

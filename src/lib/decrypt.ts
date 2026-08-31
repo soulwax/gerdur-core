@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import {Transform} from 'stream';
 import type {trackType} from '../types';
 import {Blowfish} from './blowfish';
 
@@ -71,10 +72,17 @@ export const decryptDownload = (source: Buffer, trackId: string): Buffer => {
 export class TrackDecryptStream {
   private readonly bf: Blowfish;
   private carry = Buffer.alloc(0);
-  private chunkIndex = 0;
+  private chunkIndex: number;
 
-  constructor(trackId: string) {
+  /**
+   * @param trackId    `SNG_ID`
+   * @param startChunk the 2048-byte chunk index the first byte you'll `write()`
+   *                   corresponds to — non-zero when resuming a `Range` download
+   *                   (`resumeFromByte / 2048`). Per-chunk IVs make this exact.
+   */
+  constructor(trackId: string, startChunk = 0) {
     this.bf = new Blowfish(getBlowfishKey(trackId));
+    this.chunkIndex = startChunk;
   }
 
   /** Returns the decrypted bytes for every complete 2048-byte stripe now available. */
@@ -105,3 +113,24 @@ export class TrackDecryptStream {
     return rest;
   }
 }
+
+/**
+ * A Node `Transform` that decrypts a Deezer download stripe-by-stripe as bytes
+ * flow through it — `fetch(url) → createDecryptStream(sngId) → sink`, constant
+ * memory. `startChunk` (`resumeFromByte / 2048`) supports resumed `Range` fetches.
+ */
+export const createDecryptStream = (trackId: string, startChunk = 0): Transform => {
+  const engine = new TrackDecryptStream(trackId, startChunk);
+  return new Transform({
+    transform(chunk, _enc, cb) {
+      try {
+        cb(null, engine.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+      } catch (err) {
+        cb(err as Error);
+      }
+    },
+    flush(cb) {
+      cb(null, engine.final());
+    },
+  });
+};

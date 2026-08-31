@@ -374,6 +374,33 @@ if (process.env.CI) {
     t.true(model.replayGainTrackGain?.endsWith(' dB'));
   });
 
+  test('STREAM TRACK DOWNLOAD === buffered decrypt', async (t) => {
+    const track = await api.getTrackInfo(SNG_ID);
+
+    const trackData = await getTrackDownloadUrl(track, 1);
+    if (!trackData) throw new Error('unavailable');
+    const reference = trackData.isEncrypted
+      ? decryptDownload(await getBuffer(trackData.trackUrl), track.SNG_ID)
+      : await getBuffer(trackData.trackUrl);
+
+    let lastReceived = 0;
+    const ts = await api.streamTrackDownload(track, 1, {onProgress: (r) => (lastReceived = r)});
+    const chunks: Buffer[] = [];
+    for await (const c of ts.stream) chunks.push(c as Buffer);
+    const streamed = Buffer.concat(chunks);
+
+    t.is(streamed.length, reference.length);
+    t.true(streamed.equals(reference), 'streamed bytes are identical to the buffered path');
+    t.true(lastReceived > 0, 'progress was reported');
+
+    // resume from a chunk-aligned midpoint
+    const half = Math.floor(reference.length / 2 / 2048) * 2048;
+    const resumed = await api.streamTrackDownload(track, 1, {resumeFrom: half});
+    const tailChunks: Buffer[] = [];
+    for await (const c of resumed.stream) tailChunks.push(c as Buffer);
+    t.true(Buffer.concat(tailChunks).equals(reference.subarray(half)), 'resumed tail matches');
+  });
+
   // test('TRACK128 WITHOUT ALBUM INFO', async (t) => {
   //   const track = await api.getTrackInfo('912254892');
   //   const trackData = await getTrackDownloadUrl(track, 1);
