@@ -437,6 +437,31 @@ the audio (ID3v2.3 for MP3, Vorbis comments for FLAC). Returns
 | `track`    |   Yes    | `object` | track object from `getTrackInfo` / `parseInfo` |
 | `options`  |    No    | `object` | `AddTrackTagsOptions` — `coverSize` (56–1800), pre-fetched `album`/`lyrics`/`cover`, and toggles (`richCredits`, `embedArtistImage`, `deezerIds`, …) |
 
+### Enrichment (optional, read-only)
+
+Fill gaps Deezer leaves, from open databases — **off by default, never wired into
+`addTrackTags`**. Both services rate-limit and want a descriptive `User-Agent`;
+call `configureMusicBrainz({userAgent})` once at startup.
+
+| Method | |
+| :--- | :--- |
+| `lookupRecordingByISRC(isrc)` | canonical MusicBrainz recording — title, artist credits, length, **all** known ISRCs, and the releases it's on (each with a `releaseGroupMbid`). `null` if unknown. |
+| `getMusicBrainzRecording(mbid)` / `getMusicBrainzRelease(mbid, inc?)` | direct MBID lookups — the release adds label, catalogue number, barcode. |
+| `getCoverArt(mbid, entity = 'release-group')` | Cover Art Archive images (`front` / `approved` / `thumbnails`). `null` when there's no art. |
+| `getBestCoverArtUrl(mbid, {entity?, minSize = 1200})` | one URL — the approved front cover at ≥ `minSize` px, else full-res. Deezer caps its own art at 1800 px; this goes bigger. |
+
+```js
+configureMusicBrainz({userAgent: 'myapp/1.0 ( me@example.com )'});
+const rec = await lookupRecordingByISRC(track.isrc);
+if (rec?.releases[0]?.releaseGroupMbid) {
+  const cover = await getBestCoverArtUrl(rec.releases[0].releaseGroupMbid, {minSize: 1200});
+}
+```
+
+Errors: a persistent MusicBrainz `503` ("server busy") surfaces as
+`HttpStatusError` after 3 backed-off retries — catch and fall back to Deezer's
+data.
+
 ###
 
 > We are not responsible for any misuse of this library by any third party. Please make sure to respect the artists and the music industry when using this library.

@@ -9,6 +9,7 @@ export * from './converter';
 export * from './lib/decrypt';
 export * from './lib/get-url';
 export * from './lib/stream-download';
+export * from './enrich';
 export {httpAgent, httpsAgent, getBuffer, getJson, getText, getStream} from './lib/http';
 export type {StreamResponse} from './lib/http';
 export * from './metadata-writer';
