@@ -238,6 +238,37 @@ pass the `id` to `getTrackInfo` / `getAlbumTracks` (or use the converter's
 | `track`    |   Yes    |    `string` |                       track object |
 | `quality`  |   Yes    | `1, 3 or 9` | 1 = 128kbps, 3 = 320kbps, 9 = flac |
 
+Resolves `{trackUrl, isEncrypted, fileSize}`. `isEncrypted` now comes from the
+media API's `cipher` field (authoritative) rather than a URL guess.
+
+### Formats
+
+Deezer's `get_url` understands more than `1 / 3 / 9`. `DEEZER_FORMATS` lists them
+best → worst: `FLAC`, `MP3_320`, `MP3_256`, `MP3_128`, `MP3_64`, `AAC_64`,
+`MP4_RA3`, `MP4_RA2`, `MP4_RA1` (the last four are the HE-AAC ladder some
+accounts / regions expose).
+
+- **`resolveDownloadUrls(tracks, qualities)`** — `qualities` entries may be the
+  `1 | 3 | 9` shorthand **or** any format string, e.g.
+  `resolveDownloadUrls(tracks, ['FLAC', 'MP3_320', 'AAC_64'])`. Deezer returns
+  the best each track is licensed for. Each result now also carries `format` and
+  `cipher` (`'BF_CBC_STRIPE'` or `'NONE'`).
+- **`formatName(quality)`** / **`toFormat(quality)`** — normalise a number or
+  format string to the `get_url` format string.
+
+### `.getTrackPreview(track)` / `.downloadPreview(track)`
+
+The 30-second preview clip — a plain MP3, **no licence, no `arl`, no
+encryption**. `track` may be a gw track object (reads its `MEDIA`, no extra
+request), a track id, or a number.
+
+```js
+const {url} = await getTrackPreview('3135556');      // {url, duration: 30}
+const clip = await downloadPreview('3135556');       // Buffer (ID3-tagged MP3)
+```
+
+Useful for "audition before download" and for CI that shouldn't pull full tracks.
+
 ### `.decryptDownload(data, song_id);`
 
 | Parameters | Required |     Type |            Description |

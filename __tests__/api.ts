@@ -314,6 +314,42 @@ test('BATCH RESOLVE DOWNLOAD URLS', async (t) => {
     resolved.some((e) => e !== null),
     'at least one track resolved',
   );
+  for (const entry of resolved) {
+    if (entry) {
+      t.true(['BF_CBC_STRIPE', 'NONE'].includes(entry.cipher), 'cipher is reported');
+      t.is(entry.isEncrypted, entry.cipher !== 'NONE');
+    }
+  }
+});
+
+test('FORMAT HELPERS', (t) => {
+  t.is(api.formatName(9), 'FLAC');
+  t.is(api.formatName(3), 'MP3_320');
+  t.is(api.formatName(1), 'MP3_128');
+  // format strings pass straight through
+  t.is(api.formatName('AAC_64'), 'AAC_64');
+  t.is(api.toFormat('MP3_256'), 'MP3_256');
+  t.throws(() => api.formatName(7));
+  t.true(api.DEEZER_FORMATS.includes('FLAC'));
+  t.true(api.DEEZER_FORMATS.includes('AAC_64'));
+});
+
+test('TRACK PREVIEW — 30s clip, no auth, no encryption', async (t) => {
+  // from a gw track object (uses MEDIA, no extra request)
+  const track = await api.getTrackInfo(SNG_ID);
+  const preview = await api.getTrackPreview(track);
+  t.truthy(preview);
+  t.is(preview?.duration, 30);
+  t.regex(preview?.url ?? '', /^https:\/\/.*\.mp3/);
+
+  // from a bare id (public-API lookup)
+  const byId = await api.getTrackPreview(SNG_ID);
+  t.regex(byId?.url ?? '', /^https:\/\//);
+
+  const clip = await api.downloadPreview(SNG_ID);
+  t.true(Buffer.isBuffer(clip));
+  t.true((clip?.length ?? 0) > 100_000, 'a real ~30s MP3');
+  t.is(clip?.slice(0, 3).toString('latin1'), 'ID3', 'starts with an ID3 tag');
 });
 
 if (process.env.CI) {

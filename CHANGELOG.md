@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.3.0 - 2026-08-31
+
+Phase 2.1 — all the formats, and previews. Additive; the `1 / 3 / 9` path is
+unchanged.
+
+### Added
+
+- **`getTrackPreview(track)` / `downloadPreview(track)`** — the 30-second preview
+  clip. A plain MP3: no licence, no `arl`, no Blowfish. Accepts a gw track (reads
+  `MEDIA`, no extra request), a track id, or a number.
+- **`DEEZER_FORMATS`** — every format `get_url` understands, best → worst
+  (`FLAC`, `MP3_320`, `MP3_256`, `MP3_128`, `MP3_64`, `AAC_64`, `MP4_RA3/2/1`).
+- **`resolveDownloadUrls(tracks, qualities)`** now accepts format strings in the
+  preference list (`['FLAC', 'MP3_320', 'AAC_64']`), not just `1 | 3 | 9`. Each
+  `ResolvedUrl` gains `cipher` (`'BF_CBC_STRIPE'` | `'NONE'`).
+- **`toFormat(quality)`** — normalise a number or format string to the `get_url`
+  format string. `formatName` now also accepts format strings (identity).
+- `Quality` / `DeezerFormat` exported types.
+
+### Changed
+
+- `isEncrypted` (from `getTrackDownloadUrl` and `resolveDownloadUrls`) is now
+  taken from the media API's `cipher` field instead of guessing from the URL
+  path — authoritative, and correct for `cipher: NONE` content.
+- `trackType.FILESIZE_*` fields are typed `string` (several were mistyped as the
+  literal `'0'`); added `FILESIZE_MP3_MISC` / `FILESIZE_MHM1_RA*`.
+
 ## 2.2.0 - 2026-08-31
 
 Phase 2.4 — browse & discovery. All additive, all on the public REST API (no
