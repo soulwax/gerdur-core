@@ -295,3 +295,43 @@ export const resolveDownloadUrls = async (
     };
   });
 };
+
+/**
+ * Batch-refresh `TRACK_TOKEN`s that have (or are about to) expire — one
+ * `song.getListData` request for the lot, instead of a `getTrackInfo` per track.
+ * `TRACK_TOKEN`s live ~1 hour, so a token fetched at the start of a long
+ * playlist download is dead by track 40 and surfaces as an opaque CDN 403; run
+ * the selection through this first.
+ *
+ * Returns the input tracks with fresh `TRACK_TOKEN` / `TRACK_TOKEN_EXPIRE`
+ * merged in; tracks whose token is still comfortably valid are returned as-is.
+ *
+ * @param tracks  from `getTrackInfo` / `getAlbumTracks` / `parseInfo`
+ * @param options `graceSeconds` — treat a token expiring within this window as
+ *   stale (default 300); `session` — which account (default: process default)
+ */
+export const refreshTrackTokens = async (
+  tracks: trackType[],
+  options: {graceSeconds?: number; session?: Session} = {},
+): Promise<trackType[]> => {
+  const session = options.session ?? defaultSession();
+  const graceMs = (options.graceSeconds ?? 300) * 1000;
+  const now = Date.now();
+
+  const staleIds = new Set(
+    tracks
+      .filter((t) => !t.TRACK_TOKEN || !t.TRACK_TOKEN_EXPIRE || t.TRACK_TOKEN_EXPIRE * 1000 - now < graceMs)
+      .map((t) => t.SNG_ID),
+  );
+  if (!staleIds.size) return tracks;
+
+  const {data} = await session.gw<{
+    data: {SNG_ID: string; TRACK_TOKEN: string; TRACK_TOKEN_EXPIRE: number}[];
+  }>({sng_ids: [...staleIds]}, 'song.getListData');
+
+  const fresh = new Map(data.map((d) => [d.SNG_ID, d]));
+  return tracks.map((track) => {
+    const f = fresh.get(track.SNG_ID);
+    return f ? {...track, TRACK_TOKEN: f.TRACK_TOKEN, TRACK_TOKEN_EXPIRE: Number(f.TRACK_TOKEN_EXPIRE)} : track;
+  });
+};

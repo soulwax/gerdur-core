@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.10.0 - 2026-08-31
+
+Leftovers — batch token refresh + podcast episodes. Additive.
+
+### Added
+
+- **`refreshTrackTokens(tracks, {graceSeconds?, session?})`** — one
+  `song.getListData` request refreshes every `TRACK_TOKEN` that has expired (or
+  is about to). Run a long playlist through this before `resolveDownloadUrls` so
+  it doesn't die on stale tokens at track 40. Also `session.refreshTrackTokens`.
+- **`getEpisode(episodeId)`** (`episode.getData`) and **`getShowEpisodes(showId,
+  nb?, start?)`** — podcast episodes; `EPISODE_DIRECT_STREAM_URL` is a plain MP3
+  (no licence, no decryption).
+
 ## 2.9.0 - 2026-08-31
 
 Phase 3.2 (cont.) — downloads are session-aware. Additive.
