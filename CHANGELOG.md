@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.13.2 - 2026-08-31
+
+### Changed
+
+- **Licensed under MIT.** The `LICENSE` file was empty and `package.json` said
+  `"SEE LICENSE IN LICENSE"`; both now state MIT.
+
 ## 2.13.1 - 2026-08-31
 
 ### Docs
