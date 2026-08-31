@@ -15,5 +15,5 @@ export {
   getMusicBrainzRelease,
 } from './musicbrainz';
 export type {MBRecording, MBRelease, MBArtistCredit} from './musicbrainz';
-export {getCoverArt, getBestCoverArtUrl} from './coverart';
+export {getCoverArt, getBestCoverArtUrl, getRecordingCoverArt, getCoverArtByISRC} from './coverart';
 export type {CoverArt, CoverArtImage} from './coverart';

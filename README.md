@@ -449,6 +449,8 @@ call `configureMusicBrainz({userAgent})` once at startup.
 | `getMusicBrainzRecording(mbid)` / `getMusicBrainzRelease(mbid, inc?)` | direct MBID lookups — the release adds label, catalogue number, barcode. |
 | `getCoverArt(mbid, entity = 'release-group')` | Cover Art Archive images (`front` / `approved` / `thumbnails`). `null` when there's no art. |
 | `getBestCoverArtUrl(mbid, {entity?, minSize = 1200})` | one URL — the approved front cover at ≥ `minSize` px, else full-res. Deezer caps its own art at 1800 px; this goes bigger. |
+| `getCoverArtByISRC(isrc, {minSize?, maxTries?})` | the whole chain — ISRC → recording → **canonical-first** release walk → first real front cover. Use this, not `getBestCoverArtUrl` on `releases[0]` (often a promo comp with no art). |
+| `getRecordingCoverArt(recording, …)` | same, from an already-fetched `MBRecording`. |
 
 ```js
 configureMusicBrainz({userAgent: 'myapp/1.0 ( me@example.com )'});

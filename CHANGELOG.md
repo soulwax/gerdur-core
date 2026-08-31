@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.13.0 - 2026-08-31
+
+### Added
+
+- **`getCoverArtByISRC(isrc, {minSize?, maxTries?})`** and
+  **`getRecordingCoverArt(recording, …)`** — the full ISRC → cover chain with a
+  proper release ranking: `getBestCoverArtUrl` on the *first* release a recording
+  lists often hits a promo comp / bootleg with no art. These walk the
+  release-groups **canonical-first** (Official > Album > earliest date) and
+  return the first real front cover, bounded to `maxTries` (default 4) lookups.
+
 ## 2.12.0 - 2026-08-31
 
 Phase 4 — an optional, read-only **enrichment** layer against open databases.
