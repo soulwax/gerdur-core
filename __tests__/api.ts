@@ -229,6 +229,58 @@ test('SUGGEST', async (t) => {
   t.true((response.ARTIST ?? []).some((a) => a.ART_NAME === 'Daft Punk'));
 });
 
+test('BROWSE — genres, chart, editorial', async (t) => {
+  const genres = await api.getGenres();
+  t.true(genres.data.length > 0);
+  t.is(genres.data[0].type, 'genre');
+  t.true(genres.data.some((g) => g.id === 0));
+
+  const chart = await api.getChart(0, 3);
+  t.true(chart.tracks.data.length > 0);
+  t.is(chart.tracks.data[0].position, 1);
+  t.is(chart.tracks.data[0].type, 'track');
+  t.true(Array.isArray(chart.artists.data));
+
+  const chartTracks = await api.getChartTracks(0, 5);
+  t.is(chartTracks.data.length, 5);
+
+  const editorial = await api.getEditorialList();
+  t.true(editorial.data.length > 0);
+  t.is(editorial.data[0].type, 'editorial');
+});
+
+test('BROWSE — artist discovery', async (t) => {
+  const DAFT_PUNK = 27;
+
+  const top = await api.getArtistTopTracks(DAFT_PUNK, 3);
+  t.is(top.data.length, 3);
+  t.is(top.data[0].type, 'track');
+
+  const related = await api.getRelatedArtists(DAFT_PUNK, 3);
+  t.true(related.data.length > 0);
+  t.is(related.data[0].type, 'artist');
+
+  const albums = await api.getArtistAlbums(DAFT_PUNK, 3);
+  t.true(albums.data.length > 0);
+  t.is(albums.data[0].type, 'album');
+  t.truthy(albums.data[0].release_date);
+
+  const radio = await api.getArtistRadioTracks(DAFT_PUNK);
+  t.true(radio.data.length > 0);
+});
+
+test('BROWSE — ISRC / UPC resolution', async (t) => {
+  const track = await api.getTrackByISRC('GBDUW0000059');
+  t.is(track.id, 3135556);
+  t.is(track.title, 'Harder, Better, Faster, Stronger');
+  t.is(track.type, 'track');
+
+  const album = await api.getAlbumByUPC('0724384960650');
+  t.is(album.id, 302127);
+  t.is(album.title, 'Discovery');
+  t.true((album.tracks?.data.length ?? 0) > 0);
+});
+
 test('BATCH RESOLVE DOWNLOAD URLS', async (t) => {
   if (!(await ensureDeezerUserAuth(t))) {
     return;

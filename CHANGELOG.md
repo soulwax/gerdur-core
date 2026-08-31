@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.2.0 - 2026-08-31
+
+Phase 2.4 — browse & discovery. All additive, all on the public REST API (no
+`arl` needed), all memoised.
+
+### Added
+
+- **Charts / editorial**: `getGenres`, `getChart(genreId, limit)` (the five
+  ranked lists), `getChartTracks`, `getGenreArtists`, `getEditorialList`,
+  `getEditorialReleases`, `getEditorialSelection`, `getEditorialCharts`.
+- **Artist discovery**: `getArtistTopTracks`, `getRelatedArtists`,
+  `getArtistAlbums`, `getArtistPlaylists`, `getArtistRadioTracks`.
+- **ISRC / UPC resolution**: `getTrackByISRC(isrc)` and `getAlbumByUPC(upc)` —
+  raw public-API track/album (with `bpm`, `gain`, `preview`, embedded `tracks`).
+  Complements the converter's `isrc2deezer` / `upc2deezer`, which hydrate a gw
+  track instead.
+- New exported types: `chartType`, `chartTrack`/`chartAlbum`/`chartArtist`/
+  `chartPlaylist`/`chartPodcast`, `genreType`, `editorialType`,
+  `artistAlbumResult`, `publicApiList<T>`.
+
 ## 2.1.0 - 2026-08-31
 
 Phase 2.5 — search, properly. All additive.

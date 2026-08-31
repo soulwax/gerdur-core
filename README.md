@@ -196,6 +196,41 @@ ignore the operators, so pass a plain string there.
 "as you type" UIs. `nb` (default 5) caps items per type. Needs an initialised
 session (`initDeezerApi`).
 
+### Browse & discovery
+
+Public REST endpoints — no `arl` needed, memoised like the rest. All return a
+`{data, total?, next?}` list unless noted.
+
+| Method | Returns |
+| :--- | :--- |
+| `getGenres()` | Deezer's genre list (`id` `0` = "All"). |
+| `getChart(genreId = 0, limit = 10)` | `{tracks, albums, artists, playlists, podcasts}` — the ranked lists for a genre. |
+| `getChartTracks(genreId = 0, limit = 100, index = 0)` | just the track chart, each with a `position`. |
+| `getGenreArtists(genreId)` | artists filed under a genre. |
+| `getEditorialList()` | Deezer's editorial sections. |
+| `getEditorialReleases(editorialId = 0, limit = 25, index = 0)` | new releases for a section. |
+| `getEditorialSelection(editorialId = 0)` | albums the editors are pushing. |
+| `getEditorialCharts(editorialId = 0)` | a section's charts (same 5-list shape as `getChart`). |
+| `getArtistTopTracks(artistId, limit = 50)` | an artist's most popular tracks. |
+| `getRelatedArtists(artistId, limit = 20)` | similar / related artists. |
+| `getArtistAlbums(artistId, limit = 50, index = 0)` | the artist's discography. |
+| `getArtistPlaylists(artistId, limit = 25)` | playlists featuring the artist. |
+| `getArtistRadioTracks(artistId)` | a ready-made radio seeded from the artist. |
+| `getTrackByISRC(isrc)` | the public-API track for an ISRC (`bpm`, `gain`, `preview`, …). |
+| `getAlbumByUPC(upc)` | the public-API album (with its `tracks`) for a UPC/EAN barcode. |
+
+```js
+const {data: genres} = await getGenres();
+const rock = genres.find((g) => g.name === 'Rock');
+const {tracks} = await getChart(rock.id, 20);            // this week's rock chart
+const similar = await getRelatedArtists(27);             // artists like Daft Punk
+const track = await getTrackByISRC('USUM71311296');      // "Get Lucky"
+```
+
+`getTrackByISRC` / `getAlbumByUPC` return raw public-API objects. To download,
+pass the `id` to `getTrackInfo` / `getAlbumTracks` (or use the converter's
+`isrc2deezer` / `upc2deezer`, which hydrate a gw track for you).
+
 ### `.getTrackDownloadUrl(track, quality);`
 
 | Parameters | Required |        Type |                        Description |
