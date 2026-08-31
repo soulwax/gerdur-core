@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.8.0 - 2026-08-31
+
+Phase 3.2 (cont.) — a `Session` is now usable per-account. Additive; free
+functions unchanged.
+
+### Added
+
+- **`Session` query methods**: `getUser`, `getTrackInfo`, `getLyrics`,
+  `getAlbumInfo`, `getAlbumTracks`, `getPlaylistInfo`, `getPlaylistTracks`,
+  `getArtistInfo`, `getDiscography`, `getProfile`, `searchMusic` — plus the raw
+  channels `gw` / `gwLight` / `gwGet`. So `createSession(arl)` gives you an
+  isolated client you can actually query, not just inspect.
+- Each `Session` has **its own response cache** (`session.cache`) — gateway
+  responses carry account-specific `TRACK_TOKEN`s, so sharing one cache across
+  accounts was wrong.
+
+### Changed
+
+- `request` / `requestLight` / `requestGet` are now thin wrappers over
+  `defaultSession()`. **`initDeezerApi(newArl)` now clears the default session's
+  cache** — previously a new account could be served the old account's cached
+  track tokens.
+
 ## 2.7.0 - 2026-08-31
 
 Phase 3.2 — session lifecycle. The scattered module-level state

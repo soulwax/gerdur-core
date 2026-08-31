@@ -400,21 +400,25 @@ test('FORMAT HELPERS', (t) => {
 });
 
 test('TRACK PREVIEW — 30s clip, no auth, no encryption', async (t) => {
-  // from a gw track object (uses MEDIA, no extra request)
-  const track = await api.getTrackInfo(SNG_ID);
-  const preview = await api.getTrackPreview(track);
-  t.truthy(preview);
-  t.is(preview?.duration, 30);
-  t.regex(preview?.url ?? '', /^https:\/\/.*\.mp3/);
+  try {
+    // from a gw track object (uses MEDIA, no extra request)
+    const track = await api.getTrackInfo(SNG_ID);
+    const preview = await api.getTrackPreview(track);
+    t.truthy(preview);
+    t.is(preview?.duration, 30);
+    t.regex(preview?.url ?? '', /^https:\/\/.*\.mp3/);
 
-  // from a bare id (public-API lookup)
-  const byId = await api.getTrackPreview(SNG_ID);
-  t.regex(byId?.url ?? '', /^https:\/\//);
+    // from a bare id (public-API lookup)
+    const byId = await api.getTrackPreview(SNG_ID);
+    t.regex(byId?.url ?? '', /^https:\/\//);
 
-  const clip = await api.downloadPreview(SNG_ID);
-  t.true(Buffer.isBuffer(clip));
-  t.true((clip?.length ?? 0) > 100_000, 'a real ~30s MP3');
-  t.is(clip?.slice(0, 3).toString('latin1'), 'ID3', 'starts with an ID3 tag');
+    const clip = await api.downloadPreview(SNG_ID);
+    t.true(Buffer.isBuffer(clip));
+    t.true((clip?.length ?? 0) > 100_000, 'a real ~30s MP3');
+    t.is(clip?.slice(0, 3).toString('latin1'), 'ID3', 'starts with an ID3 tag');
+  } catch (err) {
+    if (!skipIfRateLimited(t, err)) throw err;
+  }
 });
 
 if (process.env.CI) {

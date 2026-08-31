@@ -1,120 +1,53 @@
-import client from '../lib/request';
 import {DeezerError} from '../lib/errors';
+import client from '../lib/request';
+import {defaultSession} from '../lib/session';
 import lru from './cache';
 
 /**
- * In-flight request coalescing (single-flight).
- *
- * The LRU only helps *after* a response lands. During a batch download the
- * pipeline fires many identical metadata calls at once — e.g. tagging 14 tracks
- * of one album triggers 14 concurrent `album/<id>` lookups — and every one of
- * them misses the still-empty cache and hits the network. Here a second caller
- * for a key already in flight awaits the same promise instead, so the wire sees
- * exactly one request. Entries are removed as soon as they settle; the LRU takes
- * over from there.
+ * The gateway request helpers are now thin wrappers over the **default**
+ * {@link Session} — its per-session cache + single-flight coalescing does the
+ * de-duplication that used to live here. `createSession(arl)` gives you an
+ * isolated one whose `session.gw(...)` / `session.getTrackInfo(...)` don't share
+ * this cache.
  */
-const inFlight = new Map<string, Promise<any>>();
 
-const coalesce = <T>(cacheKey: string, fetcher: () => Promise<T>): Promise<T> => {
-  const cached = lru.get(cacheKey);
+/** POST `gateway.php` (main gw channel). */
+export const request = (body: object, method: string) => defaultSession().gw(body as Record<string, unknown>, method);
+
+/** POST `gw-light.php` (search / suggest / lighter methods). */
+export const requestLight = (body: object, method: string) =>
+  defaultSession().gwLight(body as Record<string, unknown>, method);
+
+/** GET `gateway.php` (app_page_get, user_getInfo, …). */
+export const requestGet = (method: string, params: Record<string, any> = {}, key = 'get_request') =>
+  defaultSession().gwGet(method, params, key);
+
+/**
+ * GET the public REST API (`api.deezer.com`). Account-independent, so it keeps
+ * its own process-wide cache rather than a per-session one.
+ */
+const inFlightPublic = new Map<string, Promise<any>>();
+export const requestPublicApi = (slug: string): Promise<any> => {
+  const cached = lru.get(slug);
   if (cached) {
     return Promise.resolve(cached);
   }
-
-  const pending = inFlight.get(cacheKey);
+  const pending = inFlightPublic.get(slug);
   if (pending) {
     return pending;
   }
-
   const promise = (async () => {
     try {
-      return await fetcher();
+      const {data} = await client.get<any>('https://api.deezer.com' + slug);
+      if (data.error) {
+        throw new DeezerError(data.error);
+      }
+      lru.set(slug, data);
+      return data;
     } finally {
-      inFlight.delete(cacheKey);
+      inFlightPublic.delete(slug);
     }
   })();
-  inFlight.set(cacheKey, promise);
+  inFlightPublic.set(slug, promise);
   return promise;
-};
-
-/**
- * Make POST requests to deezer api
- * @param {Object} body post body
- * @param {String} method request method
- */
-export const request = async (body: object, method: string) => {
-  const cacheKey = method + ':' + Object.entries(body).join(':');
-  return coalesce(cacheKey, async () => {
-    const {
-      data: {error, results},
-    } = await client.post<any>('/gateway.php', body, {params: {method}});
-
-    if (results && Object.keys(results).length > 0) {
-      lru.set(cacheKey, results);
-      return results;
-    }
-
-    throw new DeezerError(error);
-  });
-};
-
-/**
- * Make POST requests to deezer api
- * @param {Object} body post body
- * @param {String} method request method
- */
-export const requestLight = async (body: object, method: string) => {
-  const cacheKey = method + ':' + Object.entries(body).join(':');
-  return coalesce(cacheKey, async () => {
-    const {
-      data: {error, results},
-    } = await client.post<any>('https://www.deezer.com/ajax/gw-light.php', body, {
-      params: {method, api_version: '1.0'},
-    });
-
-    if (results && Object.keys(results).length > 0) {
-      lru.set(cacheKey, results);
-      return results;
-    }
-
-    throw new DeezerError(error);
-  });
-};
-
-/**
- * Make GET requests to deezer public api
- * @param {String} method request method
- * @param {Object} params request parameters
- */
-export const requestGet = async (method: string, params: Record<string, any> = {}, key = 'get_request') => {
-  const cacheKey = method + key;
-  return coalesce(cacheKey, async () => {
-    const {
-      data: {error, results},
-    } = await client.get<any>('/gateway.php', {params: {method, ...params}});
-
-    if (results && Object.keys(results).length > 0) {
-      lru.set(cacheKey, results);
-      return results;
-    }
-
-    throw new DeezerError(error);
-  });
-};
-
-/**
- * Make GET requests to deezer public api
- * @param {String} slug endpoint
- */
-export const requestPublicApi = async (slug: string) => {
-  return coalesce(slug, async () => {
-    const {data} = await client.get<any>('https://api.deezer.com' + slug);
-
-    if (data.error) {
-      throw new DeezerError(data.error);
-    }
-
-    lru.set(slug, data);
-    return data;
-  });
 };

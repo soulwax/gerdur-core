@@ -44,3 +44,41 @@ test('defaultSession — what initDeezerApi and the free functions use', async (
 test('initDeezerApi still rejects a wrong-length arl', async (t) => {
   await t.throwsAsync(() => api.initDeezerApi('too-short'), {message: /192 characters/});
 });
+
+test('Session query methods run against that account', async (t) => {
+  if (!(await ensureDeezerUserAuth(t))) {
+    return;
+  }
+  try {
+    const session = await api.createSession(process.env.HIFI_ARL);
+
+    const track = await session.getTrackInfo('3135556');
+    t.is(track.SNG_ID, '3135556');
+    t.truthy(track.TRACK_TOKEN, 'the token is this session’s');
+
+    const album = await session.getAlbumTracks('302127');
+    t.is(album.count, 14);
+
+    const artist = await session.getArtistInfo('27');
+    t.is(artist.ART_NAME, 'Daft Punk');
+
+    const search = await session.searchMusic('daft punk', ['TRACK', 'ARTIST'], 2);
+    t.true(search.TRACK.count > 0 && search.ARTIST.count > 0);
+
+    const user = await session.getUser();
+    t.truthy(user.USER_ID);
+
+    // second call is served from this session's cache (same object)
+    t.is(await session.getTrackInfo('3135556'), track);
+  } catch (err) {
+    if (!skipIfRateLimited(t, err)) throw err;
+  }
+});
+
+test('each session has its own cache', async (t) => {
+  const a = await api.createSession();
+  const b = await api.createSession();
+  t.not(a.cache, b.cache);
+  a.cache.set('k', 1);
+  t.is(b.cache.get('k'), undefined);
+});
