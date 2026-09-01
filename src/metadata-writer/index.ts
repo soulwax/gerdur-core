@@ -12,6 +12,8 @@ import type {lyricsType, trackType, trackTypePublicApi} from '../types';
 export {normalizeContributors} from './contributors';
 export type {NormalizedContributors} from './contributors';
 export {toLrc} from './lrc';
+export {configureMusixmatch, musixmatchStatus} from './musixmatchLyrics';
+export type {MusixmatchOptions} from './musixmatchLyrics';
 export {getRichAlbum} from './rich-album';
 export type {RichAlbum} from './rich-album';
 export {buildTagModel} from './model';
