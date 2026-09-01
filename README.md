@@ -589,7 +589,7 @@ model.contributors;  // normalised producers / engineers / performers / …
 | `album` / `lyrics` / `publicTrack` | — | pre-fetched payloads — pass once per album to skip refetching |
 | `embedCover` / `embedArtistImage` | `true` | |
 | `writeLyrics` / `embedSyncedLyrics` | `true` | synced LRC goes to FLAC Vorbis only (no ID3v2.3 `SYLT`) |
-| `lyricsFallback` | `true` | scrape Musixmatch when Deezer has no lyrics — 2 requests per such track, and they fail where Musixmatch blocks you |
+| `lyricsFallback` | `true` | scrape Musixmatch when Deezer has no lyrics — 2 requests per such track. Latches off automatically after 3 consecutive transport failures (see below) |
 | `richCredits` | `true` | hydrate credits + BPM for album/playlist tracks that omit them |
 | `deezerIds` / `includeRank` | `true` | write `DEEZER_*_ID` / popularity rank |
 
@@ -615,6 +615,22 @@ await pipeline(stream, createTagStream(model), createWriteStream('track.flac'));
 
 `resolveTagModel(track, options?)` does exactly what `addTrackTags` does minus
 the writing — same fetches, same coalescing, same `AddTrackTagsOptions`.
+
+**The Musixmatch fallback looks after itself.** Where Musixmatch blocks you — it
+403s from many networks and most datacentres — those scrapes cost a round trip
+each and return nothing: 2021 ms on a 14-track album, 70% of tagging time. After
+three consecutive *transport* failures it stops being attempted for the rest of
+the process, taking that album to 653 ms. A track simply not being on Musixmatch
+doesn't count toward the latch, so it can't disable itself where it actually
+works, and any success resets it.
+
+```ts
+import {configureMusixmatch, musixmatchStatus} from 'gerdur-core';
+
+musixmatchStatus();                          // {available, consecutiveFailures, maxFailures}
+configureMusixmatch({maxFailures: 5});       // more patient
+configureMusixmatch({enabled: false});       // never scrape at all
+```
 
 Building blocks, if you want the model without writing tags:
 
@@ -860,7 +876,8 @@ import type {
 `addFavoriteTracks` · `removeFavoriteTracks` · `addFavoriteAlbum` ·
 `removeFavoriteAlbum` · `addFavoriteArtist` · `removeFavoriteArtist` ·
 `followPlaylist` · `unfollowPlaylist` · `addFavoriteShow` · `createPlaylist` ·
-`addTracksToPlaylist` · `removeTracksFromPlaylist`
+`addTracksToPlaylist` · `removeTracksFromPlaylist` · `configureMusixmatch` ·
+`musixmatchStatus`
 </details>
 
 <details>

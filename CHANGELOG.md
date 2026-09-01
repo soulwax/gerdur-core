@@ -1,5 +1,39 @@
 # Changelog
 
+## 2.19.0 - 2026-08-31
+
+### Changed
+
+- **The Musixmatch lyrics fallback now latches off when it isn't working.**
+  For tracks Deezer has no lyrics for, the tagger scrapes Musixmatch — two page
+  loads each. Where Musixmatch blocks the request (it 403s from many networks and
+  most datacentres) every one of those still costs a round trip and still returns
+  nothing. Measured on a 14-track album: **2021 ms, 70% of total tagging time**,
+  for 3 KB of error pages.
+
+  After three consecutive *transport* failures the scraper stops being attempted
+  for the rest of the process. A track simply not being on Musixmatch does **not**
+  count toward that — the service is working fine in that case — so a run of
+  obscure tracks cannot disable a fallback that would otherwise succeed, and any
+  success resets the counter.
+
+  Measured, same album, default options: **2880 ms → 2641 ms on the first album
+  (the latch trips part-way through), then 653 / 729 ms — 77% faster in steady
+  state**, which is the case that matters for a library sync.
+
+### Added
+
+- **`configureMusixmatch({maxFailures?, enabled?})`** and **`musixmatchStatus()`**
+  → `{available, consecutiveFailures, maxFailures}`. Re-enabling clears the
+  count; nonsensical thresholds are rejected.
+
+### Not done, deliberately
+
+- Sending `Accept-Encoding` on the clients that don't set it. Measured the wire
+  first: a 14-track album transfers 176 KB, of which **111 KB is cover-art JPEG**
+  (incompressible) and 65 KB is `api.deezer.com` JSON that is **already gzipped**.
+  Musixmatch returns 3 KB total. The saving would have been ~0.
+
 ## 2.18.0 - 2026-08-31
 
 Write operations — the first part of this package that changes an account.
