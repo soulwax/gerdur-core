@@ -1,4 +1,6 @@
-import {parse} from 'node-html-parser';
+/* eslint-disable @typescript-eslint/no-var-requires */
+// deferred: ~93 ms to require, and only this scraper needs it
+const parse = (html: string) => (require('node-html-parser') as typeof import('node-html-parser')).parse(html);
 import {getText} from '../lib/http';
 import {randomUseragent} from './useragents';
 
