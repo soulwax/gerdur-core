@@ -1,5 +1,45 @@
 # Changelog
 
+## 2.18.0 - 2026-08-31
+
+Write operations — the first part of this package that changes an account.
+
+### Added
+
+- **`src/api/favorites.ts`** — mutating library operations, in their own module
+  and wired into no download path, so they only run when called deliberately:
+  - `addFavoriteTracks(ids)` / `removeFavoriteTracks(ids)` (`song.addFavorites` /
+    `song.removeFavorites` — note the plural)
+  - `addFavoriteAlbum` / `removeFavoriteAlbum`, `addFavoriteArtist` /
+    `removeFavoriteArtist`
+  - `followPlaylist` / `unfollowPlaylist` (the gateway wants
+    `parent_playlist_id` to follow but `playlist_id` to unfollow)
+  - `addFavoriteShow`, `createPlaylist`, `addTracksToPlaylist`,
+    `removeTracksFromPlaylist`
+
+  The surface was mapped by calling each candidate with **incomplete
+  parameters** — an existing method answers `MISSING_PARAMETER_*`, an absent one
+  `GATEWAY_ERROR` — so method names and their parameter names were established
+  without creating or changing anything.
+
+### Verification status
+
+- Method existence and parameter names: **confirmed by probe**.
+- End-to-end execution: **not run.** `__tests__/favorites.ts` contains
+  snapshot → mutate → assert → revert → assert-restored round trips, gated
+  behind `GERDUR_ALLOW_WRITE_TESTS=1` so they never fire by accident.
+
+### Known gaps
+
+- **Deezer's gateway has no playlist delete.** `playlist.delete`, `.remove`,
+  `.destroy`, `.deletePlaylist` and eight other spellings all answer
+  `GATEWAY_ERROR`, so `createPlaylist` is one-way — remove what it makes from a
+  Deezer client. Everything else here has a confirmed inverse.
+- No `show.deleteFavorite` was found, so `addFavoriteShow` is one-way too.
+- **`log.listen` (scrobbling) is not implemented.** It never answered the probe,
+  so its shape is unknown, and it writes to listening history that cannot be
+  undone — not something to ship on a guess.
+
 ## 2.17.0 - 2026-08-31
 
 The account's own library, over the authenticated gateway.

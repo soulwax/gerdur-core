@@ -47,6 +47,7 @@ the CLI and the file-writing layer on top.
   - [Browse and discover](#browse-and-discover)
   - [Flow, radios and a user's library](#flow-radios-and-a-users-library)
   - [Your own library](#your-own-library)
+  - [Changing the account (write operations)](#changing-the-account-write-operations)
   - [Podcasts](#podcasts)
   - [Preview clips](#preview-clips)
   - [Resolve a download URL](#resolve-a-download-url)
@@ -408,6 +409,43 @@ const urls = await resolveDownloadUrls(mix, [9, 3, 1]); // straight to download 
 
 `userId` defaults to the logged-in account. These are account-scoped, so they
 never enter the shared cross-session cache.
+
+### Changing the account (write operations)
+
+Everything above reads. These change the logged-in account's library for real —
+they are in their own module, wired into no download path, and only run when you
+call them.
+
+| Function | Inverse |
+| :--- | :--- |
+| `addFavoriteTracks(ids)` | `removeFavoriteTracks(ids)` |
+| `addFavoriteAlbum(id)` | `removeFavoriteAlbum(id)` |
+| `addFavoriteArtist(id)` | `removeFavoriteArtist(id)` |
+| `followPlaylist(id)` | `unfollowPlaylist(id)` |
+| `addFavoriteShow(id)` | — none found |
+| `createPlaylist(title, opts?)` | **— none exists, see below** |
+| `addTracksToPlaylist(id, sngIds)` | `removeTracksFromPlaylist(id, sngIds)` |
+
+```ts
+import {addFavoriteTracks, removeFavoriteTracks} from 'gerdur-core';
+
+await addFavoriteTracks(['3135556']);     // love it
+await removeFavoriteTracks(['3135556']);  // and back
+```
+
+> **`createPlaylist` is a one-way door.** Deezer's gateway exposes no delete —
+> a dozen spellings of `playlist.delete` all answer `GATEWAY_ERROR` — so a
+> playlist made here has to be removed from a Deezer client. It is also the one
+> function in this module that has not been exercised against a live account,
+> for exactly that reason.
+>
+> Method names and parameters were established by probing with incomplete
+> arguments (an existing method answers `MISSING_PARAMETER_*`), so the surface is
+> real; the round trips live in `__tests__/favorites.ts` behind
+> `GERDUR_ALLOW_WRITE_TESTS=1`.
+
+Scrobbling (`log.listen`) is deliberately absent: it never answered the probe and
+it writes history that cannot be undone.
 
 ### Podcasts
 
@@ -818,7 +856,11 @@ import type {
 `getUserChartTracks` · `getRadios` · `getRadioTracks` · `getRadioGenres` ·
 `getMyPlaylists` · `getMyFavoriteTracks` · `getMyFavoriteTrackIds` ·
 `getMyFavoriteAlbums` · `getMyFavoriteArtists` · `getMyFavoritePlaylists` ·
-`getMyFavoriteRadios` · `getMyFavoriteShows` · `getTrackMix`
+`getMyFavoriteRadios` · `getMyFavoriteShows` · `getTrackMix` ·
+`addFavoriteTracks` · `removeFavoriteTracks` · `addFavoriteAlbum` ·
+`removeFavoriteAlbum` · `addFavoriteArtist` · `removeFavoriteArtist` ·
+`followPlaylist` · `unfollowPlaylist` · `addFavoriteShow` · `createPlaylist` ·
+`addTracksToPlaylist` · `removeTracksFromPlaylist`
 </details>
 
 <details>

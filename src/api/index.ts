@@ -6,3 +6,4 @@ export * from './preview';
 export * from './user';
 export * from './podcast';
 export * from './library';
+export * from './favorites';
