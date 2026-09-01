@@ -83,6 +83,9 @@ pnpm add gerdur-core
 ```
 
 - **Node** ≥ 12. Ships CommonJS (`dist/`) with bundled `.d.ts`.
+- **Cheap to import** — ~43 ms. The Spotify SDK and the HTML parser load only if
+  you actually resolve a Spotify/YouTube link, so a Deezer-only run (or a cold
+  start) never pays for them.
 - **Types subpath**: the hand-written Deezer response types are also published at
   `gerdur-core/types`, so downstream packages can `import type {trackType} from
   'gerdur-core/types'` without a second dependency.

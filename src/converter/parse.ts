@@ -7,11 +7,15 @@ import {
   getPlaylistTracks,
   getTrackInfo,
 } from '../';
-import spotifyUri from 'spotify-uri';
-import * as spotify from './spotify';
-import * as tidal from './tidal';
-import * as youtube from './youtube';
 import PQueue from 'p-queue';
+
+/* eslint-disable @typescript-eslint/no-var-requires */
+// Loaded on demand: `spotify-web-api-node` alone is ~198 ms to require, and a
+// Deezer URL never needs any of it. See the note in ./index.ts.
+const spotifyUri = (): {parse: (url: string) => any} => require('spotify-uri');
+const spotify = (): typeof import('./spotify') => require('./spotify');
+const tidal = (): typeof import('./tidal') => require('./tidal');
+const youtube = (): typeof import('./youtube') => require('./youtube');
 import {headRequest} from '../lib/http';
 import type {albumType, artistInfoType, playlistInfo, trackType} from '../types';
 
@@ -59,9 +63,9 @@ export const getUrlParts = async (url: string, setToken = false): Promise<urlPar
       return {type: deezerUrlParts[1] as any, id: deezerUrlParts[2]};
 
     case 'spotify':
-      const spotifyUrlParts = spotifyUri.parse(url);
+      const spotifyUrlParts = spotifyUri().parse(url);
       if (setToken) {
-        await spotify.setSpotifyAnonymousToken();
+        await spotify().setSpotifyAnonymousToken();
       }
       return {type: ('spotify-' + spotifyUrlParts.type) as any, id: (spotifyUrlParts as any).id};
 
@@ -136,53 +140,53 @@ export const parseInfo = async (url: string) => {
       break;
 
     case 'spotify-track':
-      tracks.push(await spotify.track2deezer(info.id));
+      tracks.push(await spotify().track2deezer(info.id));
       break;
 
     case 'spotify-album':
-      const [spotifyAlbumInfo, spotifyTracks] = await spotify.album2deezer(info.id);
+      const [spotifyAlbumInfo, spotifyTracks] = await spotify().album2deezer(info.id);
       tracks = spotifyTracks;
       linkinfo = spotifyAlbumInfo;
       linktype = 'album';
       break;
 
     case 'spotify-playlist':
-      const [spotifyPlaylistInfo, spotifyPlaylistTracks] = await spotify.playlist2Deezer(info.id);
+      const [spotifyPlaylistInfo, spotifyPlaylistTracks] = await spotify().playlist2Deezer(info.id);
       tracks = spotifyPlaylistTracks;
       linkinfo = spotifyPlaylistInfo;
       linktype = 'playlist';
       break;
 
     case 'spotify-artist':
-      tracks = await spotify.artist2Deezer(info.id);
+      tracks = await spotify().artist2Deezer(info.id);
       linktype = 'artist';
       break;
 
     case 'tidal-track':
-      tracks.push(await tidal.track2deezer(info.id));
+      tracks.push(await tidal().track2deezer(info.id));
       break;
 
     case 'tidal-album':
-      const [tidalAlbumInfo, tidalAlbumTracks] = await tidal.album2deezer(info.id);
+      const [tidalAlbumInfo, tidalAlbumTracks] = await tidal().album2deezer(info.id);
       tracks = tidalAlbumTracks;
       linkinfo = tidalAlbumInfo;
       linktype = 'album';
       break;
 
     case 'tidal-playlist':
-      const [tidalPlaylistInfo, tidalPlaylistTracks] = await tidal.playlist2Deezer(info.id);
+      const [tidalPlaylistInfo, tidalPlaylistTracks] = await tidal().playlist2Deezer(info.id);
       tracks = tidalPlaylistTracks;
       linkinfo = tidalPlaylistInfo;
       linktype = 'playlist';
       break;
 
     case 'tidal-artist':
-      tracks = await tidal.artist2Deezer(info.id);
+      tracks = await tidal().artist2Deezer(info.id);
       linktype = 'artist';
       break;
 
     case 'youtube-track':
-      tracks.push(await youtube.track2deezer(info.id));
+      tracks.push(await youtube().track2deezer(info.id));
       break;
 
     default:

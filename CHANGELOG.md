@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.20.0 - 2026-08-31
+
+### Changed
+
+- **Heavy optional dependencies are no longer loaded at import time.**
+  `require('gerdur-core')` pulled in `spotify-web-api-node` (~198 ms to require
+  on its own) and `node-html-parser` (~93 ms) unconditionally — so a run that
+  only ever touches a Deezer URL, or a serverless cold start, paid for SDKs it
+  would never call.
+
+  `converter.spotify` / `.tidal` / `.youtube` are now lazy namespaces backed by a
+  proxy that defers the `require` to the first property access, and
+  `spotify-uri` / `node-html-parser` are loaded inside the functions that use
+  them. **`require('gerdur-core')` drops from 160 ms to 43 ms — 73% faster.**
+
+  No API change: `spotify.track2deezer(…)`, `Object.keys(tidal)` and the exported
+  types all behave exactly as before, and the converter suite (30 tests,
+  including the YouTube and Tidal live paths) passes unchanged.
+
 ## 2.19.0 - 2026-08-31
 
 ### Changed
